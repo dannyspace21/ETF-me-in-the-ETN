@@ -123,7 +123,7 @@ Set `DATA_PROVIDERS` to a comma-separated list. They are tried in order until on
 | `fmp` (Financial Modeling Prep) | key | US + international | `FMP_API_KEY` |
 | `alphavantage` | key | US | `ALPHAVANTAGE_API_KEY` |
 
-Non-US tickers use Yahoo-style suffixes (`QQQ3.L`, `LQQ.PA`, `HQU.TO`, `7226.HK`, `1570.T`, `122630.KS`, `00631L.TW`, `GGUS.AX`), prices are shown in the fund's own currency, and each provider translates the symbol to its own format.
+Non-US tickers use Yahoo-style suffixes (`QQQ3.L`, `LQQ.PA`, `QQU.TO`, `7226.HK`, `1570.T`, `122630.KS`, `00631L.TW`, `GGUS.AX`), prices are shown in the fund's own currency, and each provider translates the symbol to its own format.
 
 ### Alpaca
 

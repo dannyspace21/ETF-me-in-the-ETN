@@ -44,6 +44,7 @@ ISSUERS = [
     ("Bosera", r"\bbosera\b"), ("Rareview", r"\brareview\b"), ("Deutsche Bank", r"^db\b"),
     ("Yuanta", r"元大"), ("Cathay", r"國泰|国泰"), ("Fubon", r"富邦"), ("Capital", r"群益"), ("Fuh Hwa", r"復華"),
     ("CTBC", r"中信"), ("Nikko", r"日興|上場インデックス|listed index"), ("Rakuten", r"楽天"), ("Mitsubishi UFJ", r"三菱"),
+    ("MegaLong / MegaShort", r"\bmega ?(long|short)\b"), ("SavvyLong / SavvyShort", r"\bsavvy ?(long|short)\b"),
     ("Hanwha", r"\bhanaro\b"), ("Korea Investment", r"\bace\b"), ("Shinhan", r"\bsol\b(?= )"),
 ]
 
@@ -122,7 +123,9 @@ STRIP_WORDS = re.compile(
     r"chinaamc|"
     r"double|triple|bmo|ubs ag|monthly pay|quarterly pay|monthly|quarterly|reset|lev|ii|corgi|tuttle capital|"
     r"yorkville america|max|teucrium|xetfs|shrs|k-1 free|listed|advisorshares|uscf|phillip-nova|bosera|"
-    r"rareview|hanaro|kbstar|rise|ace|sol|plus|합성|레버리지|인버스|레버리지\(합성\))\b", re.I)
+    r"rareview|hanaro|kbstar|rise|ace|sol|plus|savvy ?long|savvy ?short|mega ?long|mega ?short|alternative|"
+    r"canadian)\b", re.I)
+CJK_STRIP = re.compile(r"元大|國泰|国泰|富邦|群益|復華|中信|레버리지|인버스|단일종목|\(합성\)|합성|선물|[正反倒]\d|レバレッジ|ダブルインバース|インバース|上場投信")
 DUE_RE = re.compile(r"\bdue\s+\w+\s+\d{1,2},?\s+\d{4}|\+\s*income", re.I)
 
 
@@ -223,6 +226,7 @@ def underlying(name: str) -> str:
     s = DUE_RE.sub(" ", s)
     s = re.sub(r"(?<![\w.])[-–]?\d\s+(?=(inverse\s+)?leveraged\b)", " ", s, flags=re.I)
     s = STRIP_WORDS.sub(" ", s)
+    s = CJK_STRIP.sub(" ", s)
     s = re.sub(r"[(),]|\s-\s|\s+-$|\s\d[A-Z]$", " ", s)
     s = re.sub(r"\s+", " ", s).strip(" -–&/+")
     if not s:  # the ticker itself was a strip word: "Leverage Shares 2X Long BULL Daily ETF"
@@ -233,6 +237,8 @@ def underlying(name: str) -> str:
 
 def is_single_stock(name: str, under: str) -> bool:
     n = name.lower()
+    if re.search(r"단일종목|savvy ?(long|short)|個股", n):   # Korean "single stock"; Canada's SavvyLong family
+        return True
     if re.search(r"semiconductors? (sector|index|top)|select sector|industry|internet|fang|magnificent|mag ?7|"
                  r"top \d+|basket", n):
         return False

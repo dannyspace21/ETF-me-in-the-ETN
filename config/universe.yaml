@@ -11,7 +11,7 @@
 #   * `exclude:` — tickers you never want to see, even if discovery finds them
 #
 #   ticker:    symbol. Non-US listings use Yahoo suffixes: QQQ3.L (London), LQQ.PA (Paris),
-#              HQU.TO (Toronto), 7226.HK, 1570.T (Tokyo), 122630.KS (Korea), 00631L.TW, GGUS.AX
+#              QQU.TO (Toronto), 7226.HK, 1570.T (Tokyo), 122630.KS (Korea), 00631L.TW, GGUS.AX
 #   lev:       leverage multiple (1.25, 1.5, 2, 3, 5 …)
 #   direction: long (default) | short
 #   type:      ETF | ETN | ETP
@@ -100,8 +100,8 @@ funds:
   - {ticker: BITU, lev: 2, type: ETF, group: crypto, issuer: ProShares,         under: "Bitcoin"}
   - {ticker: ETHU, lev: 2, type: ETF, group: crypto, issuer: Volatility Shares, under: "Ether futures"}
   # ---------- international (seed list; discovery finds the rest) ----------
-  - {ticker: HQU.TO,    lev: 2, type: ETF, group: broad, issuer: Global X,   under: "Nasdaq-100"}
-  - {ticker: HSU.TO,    lev: 2, type: ETF, group: broad, issuer: Global X,   under: "S&P 500"}
+  - {ticker: QQU.TO,    lev: 2, type: ETF, group: broad, issuer: Global X,   under: "Nasdaq-100"}
+  - {ticker: SPXU.TO,   lev: 2, type: ETF, group: broad, issuer: Global X,   under: "S&P 500"}
   - {ticker: QQQ3.L,    lev: 3, type: ETP, group: broad, issuer: WisdomTree, under: "Nasdaq-100"}
   - {ticker: 3USL.L,    lev: 3, type: ETP, group: broad, issuer: WisdomTree, under: "S&P 500"}
   - {ticker: LQQ.PA,    lev: 2, type: ETF, group: broad, issuer: Amundi,     under: "Nasdaq-100"}
