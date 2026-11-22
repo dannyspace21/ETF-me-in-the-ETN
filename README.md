@@ -8,9 +8,6 @@ It watches ~70 leveraged bulls and tells you when one has really pooped the bed,
 
 ## Why
 
-TQQQ fell from **$41 to $8.65 (−79%) in 2022**. Then it went to **$87**. Now it's back at **$42.75 (−51%)**.
-If it hits **$25 (−71%)**, that's the time to put in all the money the world has seen.
-
 Leveraged bulls crash hard, but the ones tracking big, durable indexes have come back harder. This app:
 
 * tracks every major **2x / 3x bull ETF and ETN** (broad market, sectors, international, commodities, rates, single stocks, crypto)
