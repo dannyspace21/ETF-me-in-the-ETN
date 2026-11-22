@@ -1,8 +1,8 @@
 <p align="center"><img src="docs/screenshots/icon.png" width="128" alt="ETF Me in the ETN icon: a shocked cartoon poop, red crash line going in, green rocket line coming out"></p>
 
 <h1 align="center">ETF Me in the ETN</h1>
-<p align="center"><b>A crash tracker for 2x & 3x bull leveraged ETFs and ETNs.</b><br>
-It watches ~70 leveraged bulls and tells you when one has really pooped the bed, because that's when they bounce the hardest.</p>
+<p align="center"><b>A crash tracker for every leveraged ETF, ETN and ETP, in the US and abroad.</b><br>
+It finds every leveraged fund that trades (and every new one the day it lists) and tells you when one has really pooped the bed, because that's when they bounce the hardest.</p>
 
 ---
 
@@ -10,7 +10,9 @@ It watches ~70 leveraged bulls and tells you when one has really pooped the bed,
 
 Leveraged bulls crash hard, but the ones tracking big, durable indexes have come back harder. This app:
 
-* tracks every major **2x / 3x bull ETF and ETN** (broad market, sectors, international, commodities, rates, single stocks, crypto)
+* **finds every leveraged ETF / ETN / ETP automatically**: US (Nasdaq, NYSE, NYSE Arca, Cboe) plus London, Xetra, Paris, Amsterdam, Milan, Swiss, Toronto, Hong Kong, Tokyo, Korea, Taiwan, ASX and more. 1.25x to 5x, bull **and** bear, broad market, sectors, single stocks, crypto, commodities, rates, volatility
+* **re-scans for new launches** every 12 hours and alerts you when a new leveraged fund lists; funds that close are marked delisted
+* pulls **real market data** from Alpaca, Yahoo, Stooq, EODHD, Tiingo, Polygon, FMP or Alpha Vantage, with automatic fallback
 * puts each fund on an **alert ladder** based on its drop from the peak
 * shows **every past 50%+ crash** and what buying it would have returned 1y and 2y later
 * runs a **Monte Carlo forecast** on the fund's own returns, so volatility decay is baked in
@@ -57,7 +59,7 @@ cp .env.example .env            # optional
 docker compose up -d --build    # http://localhost:8000
 ```
 
-The first start downloads full daily history for every fund (about a minute). After that it refreshes every `REFRESH_MINUTES`.
+The first start scans the listing sources and downloads full daily history for every leveraged fund it finds. With a few thousand funds that takes several minutes (the board fills in as it goes). After that it refreshes every `REFRESH_MINUTES` and re-scans for new funds every `DISCOVERY_HOURS`. The SQLite file grows to a few hundred MB with the full global universe.
 Your data lives in the `etfme-data` volume (SQLite), so upgrading or recreating the container doesn't lose your targets, alerts or forecasts.
 
 **No internet or just looking around?** `DEMO_MODE=true docker compose up -d`
@@ -77,21 +79,60 @@ uvicorn app.main:app --reload
 * **Release:** `git tag v1.1.0 && git push --tags`
 * The container runs as a non-root user, has a `/healthz` healthcheck and reads all its config from environment variables, so it also runs as-is on Fly.io, Railway, Render, Kubernetes, Unraid, Synology and similar.
 
+## Finding every leveraged fund (discovery)
+
+There is no hand-maintained list any more. On startup, and then every `DISCOVERY_HOURS` (default 12), the app pulls the full symbol lists below, keeps every product whose name says it is leveraged (`3X`, `UltraPro`, `Daily (2x) Leveraged`, `-3x Short`, `LevDAX`, `KODEX Leverage`, `Geared` …), works out leverage, bull/bear, issuer, underlying and group, and de-duplicates funds listed on several European venues.
+
+| Source | Key? | What it covers |
+|---|---|---|
+| `nasdaqtrader` | no | Every US-listed security (Nasdaq, NYSE, NYSE Arca, Cboe BZX). Complete for the US. |
+| `alpaca` | free account | Every US asset on Alpaca. |
+| `yahoo` | no | Keyword search across world exchanges. Good international coverage, but it is a search, so not guaranteed complete. |
+| `eodhd` | key | Full symbol lists of every exchange in `EODHD_EXCHANGES`. **Use this for complete international coverage.** |
+| `fmp` | key | FMP's global ETF list. |
+
+Sources without a key are skipped, so the defaults work out of the box: all US funds plus what Yahoo finds abroad. Add an EODHD key to get every international listing.
+
+* **New listings:** after the first scan (the baseline), any new fund fires a `🆕 New leveraged fund` alert and push notification, and the UI marks it **NEW**. Its full price history is pulled right away.
+* **Closures:** a fund that has been missing from every complete source that used to list it for `DISCOVERY_DELIST_DAYS` (default 7) is marked delisted and leaves the board. A missed Yahoo search never delists anything.
+* **Scope knobs:** `DISCOVERY_INCLUDE_INVERSE=false` for bulls only, `DISCOVERY_MIN_LEVERAGE=2` to drop 1.25x/1.5x funds, `DISCOVERY_COUNTRIES=US,GB,KR` to limit markets.
+* `config/universe.yaml` still works for pinning funds with your own metadata, and its `exclude:` list hides tickers for good.
+* `POST /api/discovery/run` scans now; `GET /api/discovery` shows the last run, per-source errors and a breakdown by market, leverage and group; `GET /api/funds/new?days=30` lists recent launches.
+
 ## Data sources (financial APIs)
 
-Set `DATA_PROVIDERS` to a comma-separated list. They are tried in order until one returns data.
+Set `DATA_PROVIDERS` to a comma-separated list. They are tried in order until one returns data, and each fund only goes to providers that cover its market.
 
-| Provider | Key? | Env var |
-|---|---|---|
-| `yahoo` (default) | no | n/a |
-| `stooq` (default fallback) | no | n/a |
-| `tiingo` | free key | `TIINGO_API_KEY` |
-| `polygon` | key | `POLYGON_API_KEY` |
-| `fmp` (Financial Modeling Prep) | key | `FMP_API_KEY` |
-| `alphavantage` | key | `ALPHAVANTAGE_API_KEY` |
+| Provider | Key? | Markets | Env var |
+|---|---|---|---|
+| `alpaca` (default, used when keys are set) | free account | US | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` |
+| `yahoo` (default) | no | US + international | n/a |
+| `stooq` (default) | no | US, UK, DE, FR, JP, HK | n/a |
+| `eodhd` (default, used when key is set) | key | US + international | `EODHD_API_KEY` |
+| `tiingo` | free key | US | `TIINGO_API_KEY` |
+| `polygon` | key | US | `POLYGON_API_KEY` |
+| `fmp` (Financial Modeling Prep) | key | US + international | `FMP_API_KEY` |
+| `alphavantage` | key | US | `ALPHAVANTAGE_API_KEY` |
+
+Non-US tickers use Yahoo-style suffixes (`QQQ3.L`, `LQQ.PA`, `HQU.TO`, `7226.HK`, `1570.T`, `122630.KS`, `00631L.TW`, `GGUS.AX`), prices are shown in the fund's own currency, and each provider translates the symbol to its own format.
+
+### Alpaca
+
+1. Create a free account at [alpaca.markets](https://alpaca.markets) and generate API keys (paper-trading keys are fine; the app only reads data).
+2. Put them in `.env`:
+   ```bash
+   ALPACA_API_KEY_ID=PK...
+   ALPACA_API_SECRET_KEY=...
+   ```
+3. Restart. Alpaca then handles **discovery of every US asset** and the **daily price updates for all US funds, batched 100 symbols per request**, so thousands of funds refresh in a few calls.
+
+Notes: Alpaca's daily history starts in 2016, so a fund's first full backfill still comes from Yahoo/Stooq/EODHD, and Alpaca keeps it current after that. The free plan can't query the most recent 15 minutes of consolidated (SIP) data; the app asks for SIP up to 16 minutes ago and falls back to the IEX feed if your plan doesn't include SIP (`ALPACA_DATA_FEED=sip|iex`). `ALPACA_PAPER=false` points asset lookups at the live trading API.
+
+### Reverse splits
+
+Leveraged funds reverse-split constantly. Every refresh compares the overlap between stored and freshly fetched prices, and if they disagree by more than 2% the fund's whole history is refetched, so a 1:10 reverse split never shows up as a fake +900% day.
 
 Each provider is about 20 lines in `app/providers/__init__.py`, so adding another is easy.
-To change which funds are tracked, edit `config/universe.yaml` (or mount your own over `/app/config`).
 
 ## AI agents
 
@@ -110,6 +151,8 @@ curl -X POST localhost:8000/api/agent/forecasts -H 'Content-Type: application/js
   -H "X-API-Key: $KEY" -d '{"agent":"my-bot","ticker":"TQQQ","stance":"accumulate",
   "horizon_days":252,"target_price":60,"probability":55,"rationale":"Down 50%+, history says…"}'
 ```
+
+`/api/agent/board` takes `direction`, `country`, `group`, `min_lev`, `min_drawdown` and `limit`, so an agent can ask e.g. for "every 3x bull in Korea down 60%+".
 
 Set `AGENT_API_KEYS=key1,key2` to require a key on POST endpoints. Leaving it empty keeps them open, which is fine on a home network but not on the public internet.
 
@@ -138,12 +181,15 @@ docker compose exec ollama ollama pull llama3.1:8b
 app/
   main.py          FastAPI app + REST API
   agents.py        agent API (manifest, context, forecasts, ask)
+  discovery.py     finds every leveraged fund (Nasdaq Trader, Alpaca, Yahoo, EODHD, FMP)
+  classify.py      fund name -> leverage, bull/bear, issuer, underlying, group
+  exchanges.py     ticker suffix <-> exchange, country, currency, provider symbol formats
   llm.py           Ollama / OpenAI-compatible / Anthropic client
   service.py       refresh loop, alert engine, notifications
   analytics.py     drawdowns, tiers, crash episodes, scorecard, Monte Carlo
-  providers/       Yahoo, Stooq, Tiingo, Polygon, FMP, Alpha Vantage, demo
+  providers/       Alpaca (batched), Yahoo, Stooq, EODHD, Tiingo, Polygon, FMP, Alpha Vantage, demo
   static/          single-page UI (vanilla JS + SVG, no CDN), icon.svg
-config/            universe.yaml (funds), alerts.yaml (ladder + seeded targets)
+config/            universe.yaml (pinned funds + exclude list), alerts.yaml (ladder + seeded targets)
 tests/             pytest
 scripts/screenshots.py   regenerates the README screenshots
 ```

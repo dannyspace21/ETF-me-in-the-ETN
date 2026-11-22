@@ -1,12 +1,24 @@
-# ETF Me in the ETN — tracked universe of 2x / 3x BULL leveraged ETFs & ETNs.
-# Add / remove freely. Tickers that a data provider can't find (delisted, renamed)
-# simply show "no data" in the UI — nothing breaks.
+# ETF Me in the ETN — CURATED funds.
 #
-#   ticker:   exchange symbol
-#   lev:      2 or 3
-#   type:     ETF | ETN
-#   group:    broad | sector | intl | commodity | rates | single-stock | crypto
-#   under:    what it multiplies
+# You don't need to list funds here any more: the discovery job (app/discovery.py)
+# scans the US symbol directories, Alpaca, Yahoo, EODHD and FMP every
+# DISCOVERY_HOURS and tracks EVERY leveraged ETF / ETN / ETP it finds, US and
+# international, bull and bear, and alerts you when a new one lists.
+#
+# This file is for:
+#   * pinning funds with hand-written metadata (it wins over what discovery guesses)
+#   * an offline / demo fallback universe
+#   * `exclude:` — tickers you never want to see, even if discovery finds them
+#
+#   ticker:    symbol. Non-US listings use Yahoo suffixes: QQQ3.L (London), LQQ.PA (Paris),
+#              HQU.TO (Toronto), 7226.HK, 1570.T (Tokyo), 122630.KS (Korea), 00631L.TW, GGUS.AX
+#   lev:       leverage multiple (1.25, 1.5, 2, 3, 5 …)
+#   direction: long (default) | short
+#   type:      ETF | ETN | ETP
+#   group:     broad | sector | intl | commodity | rates | single-stock | crypto | volatility | currency
+#   under:     what it multiplies
+exclude: []
+
 funds:
   # ---------- 3x broad market ----------
   - {ticker: TQQQ, lev: 3, type: ETF, group: broad,  issuer: ProShares, under: "Nasdaq-100"}
@@ -87,3 +99,15 @@ funds:
   - {ticker: BITX, lev: 2, type: ETF, group: crypto, issuer: Volatility Shares, under: "Bitcoin futures"}
   - {ticker: BITU, lev: 2, type: ETF, group: crypto, issuer: ProShares,         under: "Bitcoin"}
   - {ticker: ETHU, lev: 2, type: ETF, group: crypto, issuer: Volatility Shares, under: "Ether futures"}
+  # ---------- international (seed list; discovery finds the rest) ----------
+  - {ticker: HQU.TO,    lev: 2, type: ETF, group: broad, issuer: Global X,   under: "Nasdaq-100"}
+  - {ticker: HSU.TO,    lev: 2, type: ETF, group: broad, issuer: Global X,   under: "S&P 500"}
+  - {ticker: QQQ3.L,    lev: 3, type: ETP, group: broad, issuer: WisdomTree, under: "Nasdaq-100"}
+  - {ticker: 3USL.L,    lev: 3, type: ETP, group: broad, issuer: WisdomTree, under: "S&P 500"}
+  - {ticker: LQQ.PA,    lev: 2, type: ETF, group: broad, issuer: Amundi,     under: "Nasdaq-100"}
+  - {ticker: 1570.T,    lev: 2, type: ETF, group: intl,  issuer: Nomura,     under: "Nikkei 225"}
+  - {ticker: 122630.KS, lev: 2, type: ETF, group: intl,  issuer: Samsung,    under: "KOSPI 200"}
+  - {ticker: 00631L.TW, lev: 2, type: ETF, group: intl,  issuer: Yuanta,     under: "Taiwan 50"}
+  - {ticker: 7226.HK,   lev: 2, type: ETF, group: intl,  issuer: CSOP,       under: "Hang Seng TECH"}
+  - {ticker: GGUS.AX,   lev: 2, type: ETF, group: broad, issuer: BetaShares, under: "US Equity (S&P 500), hedged"}
+  - {ticker: LNAS.AX,   lev: 2, type: ETF, group: broad, issuer: Global X,   under: "Nasdaq-100"}

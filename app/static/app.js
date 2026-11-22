@@ -2,7 +2,8 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const state = { cfg: null, funds: [], filter: { lev: "", type: "", group: "", tier: "", q: "" }, sort: { key: "drawdown", asc: true }, range: "5Y", log: true };
+const PAGE = 200;
+const state = { cfg: null, funds: [], filter: { lev: "", type: "", group: "", country: "", direction: "", age: "", tier: "", q: "" }, sort: { key: "drawdown", asc: true }, range: "5Y", log: true, cur: "USD", limit: PAGE };
 
 const api = async (path, opts = {}) => {
   const r = await fetch(path, { headers: { "Content-Type": "application/json", ...(opts.headers || {}) }, ...opts });
@@ -11,7 +12,14 @@ const api = async (path, opts = {}) => {
 };
 const tierOf = (k) => state.cfg.tiers.find((t) => t.key === k) || state.cfg.tiers[0];
 const tc = (k) => `var(--t-${k})`;
-const money = (v) => (v == null ? "—" : "$" + (v >= 1000 ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : v.toFixed(v < 10 ? 2 : 2)));
+const SYM = { USD: "$", CAD: "C$", AUD: "A$", HKD: "HK$", TWD: "NT$", SGD: "S$", GBP: "£", EUR: "€", JPY: "¥", CNY: "¥", KRW: "₩", INR: "₹", CHF: "CHF ", SEK: "kr ", NOK: "kr ", DKK: "kr ", ILS: "₪", ZAR: "R ", BRL: "R$" };
+const money = (v, cur = state.cur) => {
+  if (v == null) return "—";
+  const sym = SYM[cur] ?? `${cur} `, big = v >= 1000 || cur === "KRW" || cur === "JPY";
+  return sym + (big ? v.toLocaleString(undefined, { maximumFractionDigits: v >= 1000 ? 0 : 2 }) : v.toFixed(2));
+};
+const levTag = (x) => `<span class="lev ${x.direction === "short" ? "bear" : x.type === "ETN" ? "etn" : x.type === "ETP" ? "etp" : ""}">${x.lev}x ${x.direction === "short" ? "Bear " : ""}${x.type}</span>${x.country && x.country !== "US" ? `<span class="cc" title="${esc(x.exchange)}">${x.country}</span>` : ""}`;
+const isNew = (x, days) => x.source === "discovered" && x.first_seen && Date.now() - new Date(x.first_seen) < days * 86400e3;
 const pct = (v, d = 1) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(d)}%`);
 const cls = (v) => (v == null ? "" : v >= 0 ? "up" : "down");
 const ago = (iso) => {
@@ -27,15 +35,16 @@ async function boot() {
   $("#demo").hidden = !state.cfg.demo_mode;
   $("#ver").textContent = `v${state.cfg.version} · data: ${state.cfg.demo_mode ? "demo" : state.cfg.providers.join(" → ")}`;
   $("#refresh").onclick = async () => { await api("/api/refresh", { method: "POST" }).catch(alert); $("#updated").textContent = "refreshing…"; setTimeout(loadBoard, 4000); };
-  $("#search").oninput = (e) => { state.filter.q = e.target.value.trim().toUpperCase(); renderBoard(); };
-  $("#group").onchange = (e) => { state.filter.group = e.target.value; renderBoard(); };
+  $("#search").oninput = (e) => { state.filter.q = e.target.value.trim().toUpperCase(); state.limit = PAGE; renderBoard(); };
+  $$(".controls select").forEach((sel) => (sel.onchange = (e) => { state.filter[sel.dataset.key] = e.target.value; state.limit = PAGE; renderBoard(); }));
+  $("#more").onclick = () => { state.limit += PAGE * 2; renderBoard(); };
   $$(".seg").forEach((seg) => {
     const key = seg.dataset.key;
     seg.querySelector("button").classList.add("on");
     seg.onclick = (e) => {
       if (!e.target.dataset) return;
       $$("button", seg).forEach((b) => b.classList.toggle("on", b === e.target));
-      state.filter[key] = e.target.dataset.v; renderBoard();
+      state.filter[key] = e.target.dataset.v; state.limit = PAGE; renderBoard();
     };
   });
   $$("#board th[data-sort]").forEach((th) => (th.onclick = () => {
@@ -52,6 +61,9 @@ async function boot() {
 async function loadBoard() {
   const [b, alerts] = await Promise.all([api("/api/funds"), api("/api/alerts?limit=60")]);
   state.funds = b.funds;
+  fillFilters();
+  const markets = new Set(state.funds.map((x) => x.country)).size;
+  $("#count").textContent = `Tracking ${state.funds.length.toLocaleString()} funds in ${markets} market${markets === 1 ? "" : "s"}.`;
   $("#updated").textContent = b.refreshing ? "refreshing…" : `updated ${ago(b.last_refresh)}`;
   renderLadder(); renderBoard(); renderFeed(alerts);
 }
@@ -63,6 +75,19 @@ function route() {
 }
 
 /* ------------------------------------------------------------------ board */
+function fillFilters() {
+  const opts = (key, label, fmt = (v) => v, sort) => {
+    const sel = $(`#${key}`), counts = {};
+    state.funds.forEach((x) => { const v = String(x[key] ?? ""); if (v) counts[v] = (counts[v] || 0) + 1; });
+    const keys = Object.keys(counts).sort(sort);
+    sel.innerHTML = `<option value="">${label}</option>` + keys.map((k) => `<option value="${esc(k)}">${esc(fmt(k))} (${counts[k]})</option>`).join("");
+    sel.value = keys.includes(state.filter[key]) ? state.filter[key] : "";
+  };
+  opts("lev", "Any leverage", (v) => `${v}x`, (a, b) => b - a);
+  opts("group", "All groups");
+  opts("country", "All markets");
+}
+
 function renderLadder() {
   const counts = Object.fromEntries(state.cfg.tiers.map((t) => [t.key, 0]));
   state.funds.forEach((f) => f.has_data && counts[f.tier]++);
@@ -79,7 +104,9 @@ function renderBoard() {
   const f = state.filter;
   let rows = state.funds.filter((x) =>
     (!f.lev || String(x.lev) === f.lev) && (!f.type || x.type === f.type) && (!f.group || x.group === f.group) &&
-    (!f.tier || x.tier === f.tier) && (!f.q || x.ticker.includes(f.q) || (x.under || "").toUpperCase().includes(f.q)));
+    (!f.country || x.country === f.country) && (!f.direction || x.direction === f.direction) && (!f.age || isNew(x, +f.age)) &&
+    (!f.tier || x.tier === f.tier) && (!f.q || x.ticker.includes(f.q) || (x.under || "").toUpperCase().includes(f.q) ||
+      (x.full_name || "").toUpperCase().includes(f.q) || (x.issuer || "").toUpperCase().includes(f.q)));
   const { key, asc } = state.sort;
   rows.sort((a, b) => {
     if (!a.has_data !== !b.has_data) return a.has_data ? -1 : 1;
@@ -87,17 +114,22 @@ function renderBoard() {
     return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * (asc ? 1 : -1);
   });
   $$("#board th").forEach((th) => { th.classList.toggle("sorted", th.dataset.sort === key); th.classList.toggle("asc", asc); });
+  const total = rows.length;
+  rows = rows.slice(0, state.limit);
+  $("#shown").textContent = total > rows.length ? `Showing ${rows.length.toLocaleString()} of ${total.toLocaleString()}` : `${total.toLocaleString()} funds`;
+  $("#more").hidden = total <= rows.length;
   $("#board tbody").innerHTML = rows.map((x) => {
-    const head = `<td><span class="tk">${x.ticker}</span><span class="lev ${x.type === "ETN" ? "etn" : ""}">${x.lev}x ${x.type}</span><div class="under">${esc(x.under)}</div></td>`;
+    const m = (v) => money(v, x.currency);
+    const head = `<td><span class="tk">${x.ticker}</span>${levTag(x)}${isNew(x, 30) ? `<span class="newb">NEW</span>` : ""}<div class="under" title="${esc(x.full_name)}">${esc(x.under)}</div></td>`;
     if (!x.has_data) return `<tr class="nodata" data-t="${x.ticker}">${head}<td colspan="8">no data yet ${x.error ? `— <span title="${esc(x.error)}">provider error</span>` : ""}</td></tr>`;
     const t = tierOf(x.tier), nt = x.next_tier && tierOf(x.next_tier);
     return `<tr data-t="${x.ticker}" style="--c:${tc(x.tier)}">${head}
       <td><span class="badge">${t.emoji} <span class="bl">${esc(t.label)}</span></span></td>
-      <td class="num">${money(x.price)}</td>
+      <td class="num">${m(x.price)}</td>
       <td class="num ${cls(x.change_1d)}">${pct(x.change_1d, 2)}</td>
-      <td class="num">${money(x.ath)}<div class="under">${x.ath_date}</div></td>
+      <td class="num">${m(x.ath)}<div class="under">${x.ath_date}</div></td>
       <td class="num"><span class="dd-bar"><i style="width:${Math.min(100, -x.drawdown)}%"></i></span><b class="down">${pct(x.drawdown)}</b></td>
-      <td class="num">${nt ? `${nt.emoji} ${money(x.next_tier_price)}<div class="under">${pct(x.pct_to_next_tier)} away</div>` : "🚀 bottom rung"}</td>
+      <td class="num">${nt ? `${nt.emoji} ${m(x.next_tier_price)}<div class="under">${pct(x.pct_to_next_tier)} away</div>` : "🚀 bottom rung"}</td>
       <td class="num ${cls(x.total_return)}">${pct(x.total_return, 0)}<div class="under">${x.since_label}${x.cagr != null ? ` · ${x.cagr.toFixed(0)}%/yr` : ""}</div></td>
       <td>${sparkline(x.spark, tc(x.tier))}</td></tr>`;
   }).join("") || `<tr><td colspan="9" class="empty">Nothing matches. Your filters are too picky.</td></tr>`;
@@ -169,13 +201,14 @@ async function loadDetail(t) {
 
 function renderDetail() {
   const d = current, s = d.summary;
+  state.cur = s.currency || "USD";
   if (!s.has_data) { $("#detail").innerHTML = `<div class="panel empty">No price data for ${s.ticker} yet. ${esc(s.error || "")}</div>`; return; }
   const t = tierOf(s.tier), nt = s.next_tier && tierOf(s.next_tier);
   const ladder = state.cfg.tiers.filter((x) => x.min_dd > 0).map((x) => ({ ...x, price: s.ath * (1 - x.min_dd / 100) }));
   $("#detail").innerHTML = `
     <div class="hero" style="--c:${tc(s.tier)}">
-      <div><h2>${s.ticker} <span class="lev ${s.type === "ETN" ? "etn" : ""}">${s.lev}x ${s.type}</span></h2>
-        <div class="muted">${esc(s.under)} · ${esc(s.issuer)} · data since ${s.first_date}</div></div>
+      <div><h2>${s.ticker} ${levTag(s)}</h2>
+        <div class="muted">${esc(s.full_name || s.under)} · ${esc(s.issuer)} · ${esc(s.exchange)} (${s.currency}) · data since ${s.first_date}${s.provider ? ` · via ${esc(s.provider)}` : ""}</div></div>
       <div class="num"><div class="price">${money(s.price)}</div><div class="${cls(s.change_1d)}">${pct(s.change_1d, 2)} today · as of ${s.as_of}</div></div>
     </div>
     <div class="tierbox" style="--c:${tc(s.tier)}"><div class="emo">${t.emoji}</div>

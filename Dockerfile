@@ -12,7 +12,7 @@ COPY config ./config
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="etf-me-in-the-etn" \
-      org.opencontainers.image.description="Crash tracker for 2x/3x bull leveraged ETFs & ETNs" \
+      org.opencontainers.image.description="Crash tracker for every leveraged ETF, ETN & ETP, US and international" \
       org.opencontainers.image.source="https://github.com/dannyspace21/ETF-me-in-the-ETN" \
       org.opencontainers.image.version="${VERSION}"
 

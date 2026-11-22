@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
 
-from . import analytics
+from . import analytics, discovery
 from .config import settings
-from .providers import fetch_history
+from .providers import alpaca_batch, batch_provider_first, fetch_history
 from .store import Store, now_iso
-from .universe import Fund, load_universe
+from .universe import Fund, fmt_lev, load_universe
+
+SPLIT_TOLERANCE = 0.02  # stored vs. fresh close differing by >2% on the same day = split / restatement
 
 log = logging.getLogger("etfme.service")
 
@@ -19,10 +22,14 @@ log = logging.getLogger("etfme.service")
 class Service:
     def __init__(self, store: Store):
         self.store = store
-        self.universe: list[Fund] = load_universe()
+        self.universe: list[Fund] = []
+        self._by_ticker: dict[str, Fund] = {}
+        self.board: dict[str, dict] = {}
+        self.reload_universe()
+        self.discovery_running = False
+        self.last_discovery: dict | None = None
         cfg = settings.load_yaml(settings.alerts_file)
         self.tiers: list[dict] = sorted(cfg.get("tiers", []), key=lambda t: t["min_dd"])
-        self.board: dict[str, dict] = {}
         self.refreshing = False
         self.last_refresh: str | None = None
         if not self.store.kv_get("seeded"):
@@ -30,8 +37,20 @@ class Service:
                 self.store.add_target(t["ticker"], float(t["price"]), t.get("direction", "below"), t.get("label", ""))
             self.store.kv_set("seeded", "1")
 
+    def reload_universe(self) -> list[Fund]:
+        """Rebuild the universe from curated YAML + discovered funds. Returns funds that are new to it."""
+        discovered = [] if settings.demo_mode else self.store.funds()
+        new_u = load_universe(discovered=discovered)
+        added = [f for f in new_u if f.ticker not in self._by_ticker]
+        removed = set(self._by_ticker) - {f.ticker for f in new_u}
+        self.universe = new_u
+        self._by_ticker = {f.ticker: f for f in new_u}
+        for t in removed:
+            self.board.pop(t, None)
+        return added
+
     def fund(self, ticker: str) -> Fund | None:
-        return next((f for f in self.universe if f.ticker == ticker.upper()), None)
+        return self._by_ticker.get(ticker.upper())
 
     def tier(self, key: str) -> dict:
         return next((t for t in self.tiers if t["key"] == key), self.tiers[0])
@@ -45,11 +64,38 @@ class Service:
         self.board[ticker] = s
         return s
 
-    async def refresh_one(self, client: httpx.AsyncClient, f: Fund) -> None:
-        last = self.store.last_date(f.ticker)
-        start = (date.fromisoformat(last) - timedelta(days=10)) if last else date.fromisoformat(settings.history_start)
+    def start_date(self, ticker: str) -> tuple[date, bool]:
+        """(fetch start, is_backfill)."""
+        last = self.store.last_date(ticker)
+        if last:
+            return date.fromisoformat(last) - timedelta(days=10), False
+        return date.fromisoformat(settings.history_start), True
+
+    def _split_detected(self, ticker: str, bars) -> bool:
+        """Leveraged funds reverse-split all the time. If the overlap between what we stored and
+        what the provider now says disagrees, the stored history is stale: refetch all of it."""
+        if not bars:
+            return False
+        stored = self.store.closes_since(ticker, bars[0].date)
+        for b in bars:
+            old = stored.get(b.date)
+            if old and b.close and abs(old / b.close - 1) > SPLIT_TOLERANCE:
+                return True
+        return False
+
+    async def refresh_one(self, client: httpx.AsyncClient, f: Fund, pre: tuple[str, list] | None = None) -> None:
+        start, backfill = self.start_date(f.ticker)
         try:
-            provider, bars = await fetch_history(client, f.ticker, start)
+            if pre and pre[1]:
+                provider, bars = pre
+            else:
+                provider, bars = await fetch_history(client, f.ticker, start, backfill=backfill,
+                                                     skip=("alpaca",) if pre is not None else ())
+            if not backfill and self._split_detected(f.ticker, bars):
+                log.info("%s: split/restatement detected, refetching full history", f.ticker)
+                provider, bars = await fetch_history(client, f.ticker, date.fromisoformat(settings.history_start),
+                                                     backfill=True)
+                self.store.delete_prices(f.ticker)
             self.store.upsert_prices(f.ticker, bars)
             self.store.set_meta(f.ticker, provider=provider, last_refresh=now_iso(), last_error=None)
         except Exception as e:  # noqa: BLE001
@@ -59,21 +105,136 @@ class Service:
         if s.get("has_data"):
             await self.evaluate_alerts(s)
 
+    async def prefetch_batched(self, client: httpx.AsyncClient, funds: list[Fund]) -> dict[str, tuple[str, list]]:
+        """Alpaca returns 100 symbols per request, so the daily update of thousands of US funds
+        is a handful of calls instead of thousands. Backfills go through the per-ticker chain."""
+        if settings.demo_mode:
+            return {}
+        groups: dict[date, list[str]] = {}
+        for f in funds:
+            if batch_provider_first(f.ticker):
+                start, backfill = self.start_date(f.ticker)
+                if not backfill:
+                    groups.setdefault(start, []).append(f.ticker)
+        out: dict[str, tuple[str, list]] = {}
+        for start, syms in groups.items():
+            try:
+                got = await alpaca_batch(client, syms, start)
+            except Exception as e:  # noqa: BLE001
+                log.warning("alpaca batch (%d symbols) failed: %s", len(syms), e)
+                got = {}  # empty => these funds skip Alpaca and use the next provider
+            for sym in syms:  # empty result => fall through to the other providers
+                out[sym] = ("alpaca", got.get(sym, []))
+        return out
+
+    async def refresh_funds(self, funds: list[Fund]) -> None:
+        sem = asyncio.Semaphore(max(1, settings.fetch_concurrency))
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            pre = await self.prefetch_batched(client, funds)
+
+            async def one(f):
+                async with sem:
+                    await self.refresh_one(client, f, pre.get(f.ticker))
+            await asyncio.gather(*(one(f) for f in funds))
+
     async def refresh_all(self) -> None:
         if self.refreshing:
             return
         self.refreshing = True
         try:
-            sem = asyncio.Semaphore(6)
-            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-                async def one(f):
-                    async with sem:
-                        await self.refresh_one(client, f)
-                await asyncio.gather(*(one(f) for f in self.universe))
+            await self.refresh_funds(list(self.universe))
             self.last_refresh = now_iso()
             log.info("refreshed %d funds", len(self.universe))
         finally:
             self.refreshing = False
+
+    # ---------------------------------------------------------------- discovery
+    async def run_discovery(self, client: httpx.AsyncClient | None = None) -> dict:
+        """Find every leveraged ETF/ETN/ETP, add new ones, mark vanished ones delisted, alert on launches."""
+        if self.discovery_running:
+            return self.last_discovery or {}
+        self.discovery_running = True
+        try:
+            own = client is None
+            client = client or httpx.AsyncClient(timeout=60, follow_redirects=True)
+            try:
+                res = await discovery.discover(client)
+            finally:
+                if own:
+                    await client.aclose()
+            now = now_iso()
+            booted = {s for s in discovery.SOURCES if self.store.kv_get(f"discovery_boot:{s}")}
+            new_listings, added_rows = [], 0
+            for t, f in res.funds.items():
+                old = self.store.get_fund(t)
+                row = {**f, "first_seen": old["first_seen"] if old else now, "last_seen": now, "status": "active"}
+                if old:
+                    row["sources"] = set(f["sources"]) | set((old.get("sources") or "").split(",")) - {""}
+                self.store.upsert_fund(row)
+                if not old:
+                    added_rows += 1
+                    if set(f["sources"]) & booted:
+                        new_listings.append(t)
+            # delist: gone from every exhaustive source that found it, for long enough
+            ok_exhaustive = set(res.ok) & discovery.EXHAUSTIVE
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=settings.discovery_delist_days)).isoformat()
+            delisted = []
+            for row in self.store.funds("active"):
+                srcs = set((row.get("sources") or "").split(",")) - {""}
+                if row["ticker"] not in res.funds and srcs and srcs <= ok_exhaustive and (row["last_seen"] or "") < cutoff:
+                    row["status"] = "delisted"
+                    self.store.upsert_fund(row)
+                    delisted.append(row["ticker"])
+            for s in res.ok:
+                self.store.kv_set(f"discovery_boot:{s}", now)
+            added = self.reload_universe()
+            for f in added:
+                self.rebuild(f.ticker)
+            for t in new_listings:
+                f = self.fund(t)
+                if f:
+                    await self.emit(ticker=t, kind="new_fund", severity="new",
+                                    title=f"🆕 New leveraged fund: {t}",
+                                    message=f"{f.full_name or f.under} — {fmt_lev(f.lev)}x "
+                                            f"{'bear' if f.direction == 'short' else 'bull'} {f.type} on "
+                                            f"{f.exchange} ({f.currency}).")
+            self.last_discovery = {
+                "ts": now, "found": len(res.funds), "added": added_rows, "new_listings": new_listings,
+                "delisted": delisted, "sources_ok": res.ok, "errors": res.errors, "raw_counts": res.raw_counts}
+            self.store.kv_set("last_discovery", json.dumps(self.last_discovery))
+            log.info("discovery: %d found, %d added (%d new listings), %d delisted",
+                     len(res.funds), added_rows, len(new_listings), len(delisted))
+            if added:
+                asyncio.create_task(self.refresh_funds(added))
+            return self.last_discovery
+        finally:
+            self.discovery_running = False
+
+    async def discovery_loop(self) -> None:
+        if settings.demo_mode or not settings.discovery_sources or settings.discovery_hours <= 0:
+            return
+        while True:
+            try:
+                await self.run_discovery()
+            except Exception:  # noqa: BLE001
+                log.exception("discovery error")
+            await asyncio.sleep(settings.discovery_hours * 3600)
+
+    def discovery_status(self) -> dict:
+        if self.last_discovery is None:
+            raw = self.store.kv_get("last_discovery")
+            self.last_discovery = json.loads(raw) if raw else None
+        counts: dict[str, dict[str, int]] = {"country": {}, "group": {}, "direction": {}, "lev": {}}
+        for f in self.universe:
+            for k, v in (("country", f.country), ("group", f.group), ("direction", f.direction),
+                         ("lev", fmt_lev(f.lev))):
+                counts[k][v] = counts[k].get(v, 0) + 1
+        return {"enabled": not settings.demo_mode and bool(settings.discovery_sources) and settings.discovery_hours > 0,
+                "running": self.discovery_running, "every_hours": settings.discovery_hours,
+                "sources": settings.discovery_sources, "tracked": len(self.universe),
+                "curated": sum(1 for f in self.universe if f.source == "curated"),
+                "discovered": sum(1 for f in self.universe if f.source == "discovered"),
+                "breakdown": counts, "last_run": self.last_discovery}
 
     def warm_from_cache(self) -> None:
         for f in self.universe:
@@ -124,9 +285,17 @@ class Service:
             elif not hit and tgt["triggered_at"]:
                 self.store.x("UPDATE targets SET triggered_at=NULL WHERE id=?", (tgt["id"],))
 
+    def should_push(self, a: dict) -> bool:
+        if a["kind"] == "new_fund":
+            return settings.notify_new_funds
+        if a["kind"] == "tier" and settings.notify_min_tier:
+            return analytics.tier_index(a["severity"], self.tiers) >= analytics.tier_index(settings.notify_min_tier,
+                                                                                          self.tiers)
+        return True
+
     async def emit(self, **a) -> None:
         self.store.add_alert(**a)
-        if settings.notify_urls:
+        if settings.notify_urls and self.should_push(a):
             await notify(a["title"], a["message"])
 
 

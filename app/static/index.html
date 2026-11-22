@@ -13,7 +13,7 @@
     <img src="/static/icon.svg" alt="" width="44" height="44">
     <div>
       <h1>ETF Me in the ETN</h1>
-      <p class="tag">Leveraged bull crash tracker — for when they really poop the bed.</p>
+      <p class="tag">Every leveraged ETF, ETN &amp; ETP on the planet — for when they really poop the bed. <span id="count"></span></p>
     </div>
   </a>
   <div class="top-right">
@@ -33,12 +33,12 @@
       <div class="panel grow">
         <div class="controls">
           <input id="search" type="search" placeholder="Search ticker or underlying…">
-          <div class="seg" data-key="lev"><button data-v="">All</button><button data-v="3">3x</button><button data-v="2">2x</button></div>
-          <div class="seg" data-key="type"><button data-v="">All</button><button data-v="ETF">ETF</button><button data-v="ETN">ETN</button></div>
-          <select id="group">
-            <option value="">All groups</option><option>broad</option><option>sector</option><option>intl</option>
-            <option>commodity</option><option>rates</option><option>single-stock</option><option>crypto</option>
-          </select>
+          <div class="seg" data-key="direction"><button data-v="">Bull + Bear</button><button data-v="long">🐂 Bull</button><button data-v="short">🐻 Bear</button></div>
+          <div class="seg" data-key="type"><button data-v="">All</button><button data-v="ETF">ETF</button><button data-v="ETN">ETN</button><button data-v="ETP">ETP</button></div>
+          <select id="lev" data-key="lev"><option value="">Any leverage</option></select>
+          <select id="group" data-key="group"><option value="">All groups</option></select>
+          <select id="country" data-key="country"><option value="">All markets</option></select>
+          <select id="age" data-key="age"><option value="">Any listing date</option><option value="30">🆕 found in last 30 days</option><option value="90">found in last 90 days</option></select>
         </div>
         <div class="table-wrap">
           <table id="board">
@@ -56,6 +56,7 @@
             <tbody></tbody>
           </table>
         </div>
+        <div class="more"><span id="shown" class="muted small"></span> <button id="more" class="btn ghost" hidden>Show more</button></div>
       </div>
       <aside class="panel feed">
         <h3>💨 Alert feed</h3>
