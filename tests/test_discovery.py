@@ -58,6 +58,7 @@ def listing_handler(state):
 @pytest.fixture
 def live(monkeypatch):
     monkeypatch.setattr(settings, "demo_mode", False)
+    monkeypatch.setattr(settings, "snapshot_file", "/nonexistent/discovered.json")  # isolate from the shipped list
     monkeypatch.setattr(settings, "discovery_sources", ["nasdaqtrader", "yahoo", "alpaca"])
     monkeypatch.setattr(settings, "alpaca_key_id", "")
     monkeypatch.setattr(settings, "alpaca_secret", "")
