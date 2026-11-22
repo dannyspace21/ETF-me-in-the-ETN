@@ -53,7 +53,7 @@ class Settings:
 
     # Discovery: find every leveraged ETF/ETN/ETP and notice new launches
     discovery_sources: list[str] = field(default_factory=lambda: [
-        s.strip().lower() for s in _env("DISCOVERY_SOURCES", "nasdaqtrader,alpaca,yahoo,eodhd,fmp").split(",")
+        s.strip().lower() for s in _env("DISCOVERY_SOURCES", "nasdaqtrader,alpaca,tsx,twse,tpex,krx,hkex,jpx,yahoo,eodhd,fmp").split(",")
         if s.strip()])
     discovery_hours: float = field(default_factory=lambda: float(_env("DISCOVERY_HOURS", "12")))
     discovery_include_inverse: bool = field(default_factory=lambda: _bool("DISCOVERY_INCLUDE_INVERSE", True))

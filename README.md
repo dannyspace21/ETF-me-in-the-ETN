@@ -10,7 +10,7 @@ It finds the leveraged funds that trade, re-checks for new launches twice a day,
 
 Leveraged bulls crash hard, but the ones tracking big, durable indexes have come back harder. This app:
 
-* **finds leveraged ETFs / ETNs / ETPs automatically**: every US listing (Nasdaq, NYSE, NYSE Arca, Cboe), plus London, Xetra, Paris, Amsterdam, Milan, Swiss, Toronto, Hong Kong, Tokyo, Korea, Taiwan, ASX and more. 1.25x and up, bull **and** bear, broad market, sectors, single stocks, crypto, commodities, rates, volatility. International coverage is best-effort from Yahoo search unless you add an EODHD key (see [discovery](#finding-every-leveraged-fund-discovery))
+* **finds leveraged ETFs / ETNs / ETPs automatically**: every US listing (Nasdaq, NYSE, NYSE Arca, Cboe), plus London, Xetra, Paris, Amsterdam, Milan, Swiss, Toronto, Hong Kong, Tokyo, Korea, Taiwan, ASX and more. 1.25x and up, bull **and** bear, broad market, sectors, single stocks, crypto, commodities, rates, volatility. The US, Canada, Hong Kong, Taiwan and Korea come from the exchanges' own official listings; Europe, Australia and older Japanese funds come from a best-effort Yahoo search unless you add an EODHD key (see [discovery](#finding-every-leveraged-fund-discovery))
 * **re-scans for new launches** every 12 hours and alerts you when a new leveraged fund shows up; funds that close are marked delisted
 * pulls **real market data** from Alpaca, Yahoo, Stooq, EODHD, Tiingo, Polygon, FMP or Alpha Vantage, with automatic fallback
 * puts each fund on an **alert ladder** based on its drop from the peak
@@ -84,21 +84,27 @@ uvicorn app.main:app --reload
 
 ## Finding every leveraged fund (discovery)
 
-You no longer have to maintain the fund list by hand. On startup, and then every `DISCOVERY_HOURS` (default 12), the app pulls the symbol lists below, keeps every product whose name says it is leveraged (`3X`, `UltraPro`, `Daily (2x) Leveraged`, `-3x Short`, `LevDAX`, `KODEX Leverage`, `Geared` …), works out leverage, bull/bear, issuer, underlying and group, and de-duplicates funds listed on several European venues. Recognising a leveraged fund from its name is rule-based, so the odd fund can be missed or put in the wrong group; pin or exclude it in `config/universe.yaml` (see below).
+You no longer have to maintain the fund list by hand. On startup, and then every `DISCOVERY_HOURS` (default 12), the app pulls the symbol lists below, keeps every product whose name says it is leveraged (`3X`, `UltraPro`, `Daily (2x) Leveraged`, `-3x Short`, `MegaLong (3X)`, `LevDAX`, `Geared`, Korean `레버리지` / `인버스2X`, Taiwanese `正2`, Japanese `レバレッジ`, Hong Kong's coded `XL2CSOPHSTECH` …), works out leverage, bull/bear, issuer, underlying and group, and de-duplicates funds listed on several European venues. Recognising a leveraged fund from its name is rule-based, so the odd fund can be missed or put in the wrong group; pin or exclude it in `config/universe.yaml` (see below).
 
-| Source | Key? | What it covers |
-|---|---|---|
-| `nasdaqtrader` | no | Every US-listed security (Nasdaq, NYSE, NYSE Arca, Cboe BZX). Complete for the US. |
-| `alpaca` | free account | Every US asset on Alpaca. |
-| `yahoo` | no | Keyword search across world exchanges. Good international coverage, but it is a search, so not guaranteed complete. |
-| `eodhd` | key | Full symbol lists of every exchange in `EODHD_EXCHANGES`. **Use this for complete international coverage.** |
-| `fmp` | key | FMP's global ETF list. |
+| Source | Key? | Market | What it is | Complete? |
+|---|---|---|---|---|
+| `nasdaqtrader` | no | 🇺🇸 US | Nasdaq's symbol directory of every US-listed security (Nasdaq, NYSE, NYSE Arca, Cboe BZX) | ✅ |
+| `alpaca` | free account | 🇺🇸 US | Every US asset on Alpaca | ✅ |
+| `tsx` | no | 🇨🇦 Canada | Toronto Stock Exchange's company directory | ✅ |
+| `hkex` | no | 🇭🇰 Hong Kong | HKEX's official List of Securities, "Leveraged and Inverse" category | ✅ |
+| `twse` / `tpex` | no | 🇹🇼 Taiwan | Taiwan Stock Exchange and Taipei Exchange (OTC) open data | ✅ |
+| `krx` | no | 🇰🇷 Korea | Every Korean ETF, via Naver Finance's public ETF list | ✅ |
+| `jpx` | no | 🇯🇵 Japan | JPX's table of leveraged / inverse products listed **this year**: catches new Japanese launches | new only |
+| `yahoo` | no | 🌍 everywhere | Keyword search: the only keyless route to London, Xetra, Paris, Milan, Amsterdam, Swiss, ASX and older Tokyo listings. Yahoo rate-limits it, so results vary from run to run | ❌ best effort |
+| `eodhd` | key | 🌍 everywhere | Full symbol lists of every exchange in `EODHD_EXCHANGES`. **The way to get complete European and Australian coverage.** | ✅ |
+| `fmp` | key | 🌍 everywhere | FMP's global ETF list | ✅ |
 
-Sources without a key are skipped, so the defaults work out of the box: all US funds plus what Yahoo finds abroad. Add an EODHD key to get every international listing.
+Sources without a key are skipped, so the defaults work out of the box: complete coverage of the US, Canada, Hong Kong, Taiwan and Korea, Japanese launches, and whatever Yahoo search turns up elsewhere. Add an EODHD key for every European and Australian listing.
 
 * **New listings:** each source's first scan is a baseline: those funds already existed, so they get no alert and no badge. After that, any fund a source hasn't seen before fires a `🆕 New leveraged fund` alert and push notification, gets a **NEW** badge for 30 days, and has its full price history pulled right away. Because scans run every `DISCOVERY_HOURS`, a launch is picked up within about that long of appearing in a source's listings. Funds that only Yahoo search finds can also be older funds the search hadn't surfaced before.
 * **Closures:** a fund that has been missing from every complete source that used to list it for `DISCOVERY_DELIST_DAYS` (default 7) is marked delisted and leaves the board. A missed Yahoo search never delists anything.
 * **Scope knobs:** `DISCOVERY_INCLUDE_INVERSE=false` for bulls only, `DISCOVERY_MIN_LEVERAGE=2` to drop 1.25x/1.5x funds, `DISCOVERY_COUNTRIES=US,GB,KR` to limit markets.
+* **Shipped fund list:** a GitHub Actions workflow (`.github/workflows/discovery-snapshot.yml`) runs this same discovery every day and commits the result to `config/discovered.json`. The app loads that file on startup, so it tracks the full list from the first second, even before its own first scan or with no internet. Add `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `EODHD_API_KEY` or `FMP_API_KEY` as repository secrets and the daily run uses them too. The workflow refuses to save a list of fewer than 150 funds, so a broken source can't wipe it.
 * `config/universe.yaml` holds the ~80 curated funds (always tracked, and the whole universe in demo mode). Entries there override what discovery guesses, and its `exclude:` list hides tickers for good.
 * `POST /api/discovery/run` scans now; `GET /api/discovery` shows the last run, per-source errors and a breakdown by market, leverage and group; `GET /api/funds/new?days=30` lists recent launches.
 
@@ -202,7 +208,7 @@ docker compose exec ollama ollama pull llama3.1:8b
 app/
   main.py          FastAPI app + REST API
   agents.py        agent API (manifest, context, forecasts, ask)
-  discovery.py     finds every leveraged fund (Nasdaq Trader, Alpaca, Yahoo, EODHD, FMP)
+  discovery.py     finds every leveraged fund (Nasdaq Trader, Alpaca, TSX, HKEX, TWSE/TPEx, KRX, JPX, Yahoo, EODHD, FMP)
   classify.py      fund name -> leverage, bull/bear, issuer, underlying, group
   exchanges.py     ticker suffix <-> exchange, country, currency, provider symbol formats
   net.py           shared HTTP client: per-host rate limit + retries
@@ -212,9 +218,11 @@ app/
   providers/       Alpaca (batched), Yahoo, Stooq, EODHD, Tiingo, Polygon, FMP, Alpha Vantage, demo
   store.py         SQLite: prices, discovered funds, alerts, targets, watchlist, forecasts
   static/          single-page UI (vanilla JS + SVG, no CDN), icon.svg
-config/            universe.yaml (pinned funds + exclude list), alerts.yaml (ladder + seeded targets)
+config/            universe.yaml (pinned funds + exclude list), alerts.yaml (ladder + seeded targets),
+                   discovered.json (every known leveraged fund, refreshed daily by GitHub Actions)
 tests/             pytest
-scripts/screenshots.py   regenerates the README screenshots
+scripts/screenshots.py       regenerates the README screenshots
+scripts/snapshot_universe.py runs discovery and writes config/discovered.json (used by the daily workflow)
 ```
 
 Run the tests with `pip install -r requirements-dev.txt && pytest`.

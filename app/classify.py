@@ -118,7 +118,8 @@ STRIP_WORDS = re.compile(
     r"futures|daily target|leverage shares|graniteshares|direxion|proshares|microsectors|defiance|tradr|"
     r"t-rex|rex|volatility shares|axs|wisdomtree|amundi|lyxor|xtrackers|global x|betapro|horizons|csop|"
     r"kodex|tiger|kbstar|arirang|next funds|ifree|maxis|yuanta|fubon|cathay|betashares|etracs|ipath|"
-    r"velocityshares|invesco|ishares|21shares|valkyrie|bitwise|roundhill|samsung|mirae asset|boost|"
+    r"velocityshares|invesco|ishares|21shares|valkyrie|bitwise|roundhill|samsung(?! electronics)|mirae asset|boost|"
+    r"chinaamc|"
     r"double|triple|bmo|ubs ag|monthly pay|quarterly pay|monthly|quarterly|reset|lev|ii|corgi|tuttle capital|"
     r"yorkville america|max|teucrium|xetfs|shrs|k-1 free|listed|advisorshares|uscf|phillip-nova|bosera|"
     r"rareview|hanaro|kbstar|rise|ace|sol|plus|합성|레버리지|인버스|레버리지\(합성\))\b", re.I)
@@ -247,6 +248,7 @@ def is_single_stock(name: str, under: str) -> bool:
 def group_of(name: str, symbol: str = "", country: str = "US") -> str:
     n = re.sub(r"currency[- ]hedged", "", name.lower())
     n = re.sub(r"\bu\.s\.", "us", n).replace("-cap", " cap")
+    n = re.sub(r"chinaamc|china asset management|china merchants", "", n)  # issuers, not underlyings
     for g, rx in GROUP_WORDS[:5]:  # crypto, volatility, currency, rates, commodity
         if re.search(rx, n):
             return g

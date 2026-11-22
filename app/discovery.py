@@ -8,8 +8,15 @@ Source          Key?   Coverage
 --------------  -----  -----------------------------------------------------------
 nasdaqtrader    no     every US-listed security (Nasdaq, NYSE, NYSE Arca, Cboe BZX)
 alpaca          yes    every US security tradable on Alpaca
-yahoo           no     global, keyword search (London, Xetra, Paris, Toronto, HK,
-                       Tokyo, Korea, Taiwan, ASX …); best effort, not exhaustive
+tsx             no     every Toronto Stock Exchange listing (official TSX directory)
+twse            no     every Taiwan Stock Exchange ETF (TWSE OpenAPI)
+tpex            no     every Taipei Exchange (OTC) ETF, e.g. leveraged bond ETFs (TPEx OpenAPI)
+krx             no     every Korean ETF (KRX listings via Naver Finance)
+hkex            no     every Hong Kong leveraged & inverse product (HKEX "List of Securities")
+jpx             no     Tokyo leveraged / inverse products listed this year (JPX new-listings
+                       table): catches Japanese launches; older ones come from Yahoo
+yahoo           no     global keyword search (London, Xetra, Paris, Milan, Amsterdam,
+                       Swiss, ASX …); best effort, not exhaustive, rate-limited
 eodhd           yes    full symbol lists of every exchange in EODHD_EXCHANGES
 fmp             yes    FMP's global ETF list
 
@@ -21,6 +28,9 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import html
+import json
+import zipfile
 import io
 import logging
 import re
@@ -34,8 +44,9 @@ from .config import settings
 
 log = logging.getLogger("etfme.discovery")
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) etf-me-in-the-etn/2.0"}
-EXHAUSTIVE = {"nasdaqtrader", "alpaca", "eodhd", "fmp"}
-YAHOO_PAUSE = 0.25
+EXHAUSTIVE = {"nasdaqtrader", "alpaca", "eodhd", "fmp", "tsx", "twse", "tpex", "krx", "hkex"}
+YAHOO_PAUSE = 1.0       # Yahoo answers bursts with 429s; one query a second is fine
+YAHOO_GIVE_UP = 4       # stop after this many failed queries in a row (we're being rate-limited)
 
 
 @dataclass
@@ -123,28 +134,186 @@ YAHOO_QUERIES = [
 
 async def yahoo(client: httpx.AsyncClient) -> list[Listing]:
     out: list[Listing] = []
-    failures = 0
+    failures = streak = 0
     for q in YAHOO_QUERIES:
+        if streak >= YAHOO_GIVE_UP:
+            log.info("yahoo search: %d failures in a row, stopping early (rate-limited)", streak)
+            break
         try:
             r = await client.get("https://query2.finance.yahoo.com/v1/finance/search", headers=UA, params={
                 "q": q, "quotesCount": 100, "newsCount": 0, "listsCount": 0, "enableFuzzyQuery": "false"})
             r.raise_for_status()
+            streak = 0
         except Exception as e:  # noqa: BLE001
             failures += 1
+            streak += 1
             log.debug("yahoo search %r failed: %s", q, e)
+            await asyncio.sleep(YAHOO_PAUSE)
             continue
         for qt in r.json().get("quotes") or []:
-            if qt.get("quoteType") not in ("ETF", "EQUITY", "MUTUALFUND"):
-                continue
             sym = qt.get("symbol") or ""
+            if qt.get("quoteType") not in ("ETF", "EQUITY") or sym.startswith("0P"):  # 0P… = mutual funds
+                continue
             suf = ex.YAHOO_EXCH_TO_SUFFIX.get(qt.get("exchange", ""), ex.split(sym)[1])
             if suf is None or ex.split(sym)[1] in ex.CROSS_LISTING_SUFFIXES:
                 continue
             out.append(Listing(sym.upper(), qt.get("longname") or qt.get("shortname") or "", "yahoo",
                                "ETF" if qt.get("quoteType") == "ETF" else None))
         await asyncio.sleep(YAHOO_PAUSE)  # be polite
-    if failures == len(YAHOO_QUERIES):
-        raise RuntimeError("yahoo: every search failed")
+    if not out and failures:
+        raise RuntimeError(f"yahoo: {failures} searches failed (rate-limited?)")
+    return out
+
+
+# ---------------------------------------------------------------- official exchange lists (no key)
+async def tsx(client: httpx.AsyncClient) -> list[Listing]:
+    """Toronto: the TSX company directory lists every security, ETFs included."""
+    r = await client.get("https://www.tsx.com/json/company-directory/search/tsx/%5E*", headers=UA)
+    r.raise_for_status()
+    out = [Listing(f"{x['symbol'].replace('.', '-')}.TO", x.get("name") or "", "tsx")
+           for x in r.json().get("results") or [] if x.get("symbol")]
+    if not out:
+        raise RuntimeError("tsx: empty directory")
+    return out
+
+
+async def twse(client: httpx.AsyncClient) -> list[Listing]:
+    """Taiwan: TWSE OpenAPI daily quotes cover every listed security. ETF codes start with 00;
+    an L suffix marks a leveraged fund (名稱 e.g. 元大台灣50正2 = 2x long)."""
+    r = await client.get("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", headers=UA)
+    r.raise_for_status()
+    out = []
+    for x in r.json():
+        code, name = str(x.get("Code") or ""), str(x.get("Name") or "")
+        if not code.startswith("00"):
+            continue
+        if code.endswith("L") and not re.search(r"\d", name[-3:]):  # leveraged by code, multiple not in the name
+            name += " 正2"
+        out.append(Listing(f"{code}.TW", name, "twse", "ETF"))
+    if not out:
+        raise RuntimeError("twse: no ETFs in response")
+    return out
+
+
+async def tpex(client: httpx.AsyncClient) -> list[Listing]:
+    """Taiwan OTC: TPEx OpenAPI daily quotes (leveraged bond ETFs such as 美債20正2 trade here)."""
+    r = await client.get("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes", headers=UA)
+    r.raise_for_status()
+    out = []
+    for x in r.json():
+        code, name = str(x.get("SecuritiesCompanyCode") or ""), str(x.get("CompanyName") or "")
+        if not code.startswith("00"):
+            continue
+        if code.endswith("L") and not re.search(r"\d", name[-3:]):
+            name += " 正2"
+        out.append(Listing(f"{code}.TWO", name, "tpex", "ETF"))
+    if not out:
+        raise RuntimeError("tpex: no ETFs in response")
+    return out
+
+
+# HKEX abbreviates product names: XL2CSOPHSTECH = swap-based (X) Leveraged 2x, CSOP, Hang Seng TECH.
+# F = futures-based, X = swap-based; L<n> = n-times long; I<n> = n-times inverse (I alone = -1x).
+HK_NAME = re.compile(r"^(?P<rep>[FX])(?P<kind>[LI])(?P<n>\d(?:\.\d)?)?\s*(?P<rest>.+)$")
+HK_ISSUERS = {"CSOP": "CSOP", "CAM": "ChinaAMC", "BOS": "Bosera", "SAM": "Samsung", "MIRAE": "Mirae Asset",
+              "PREMIA": "Premia", "HSIM": "Hang Seng Investment", "GX": "Global X", "HGI": "Huatai"}
+HK_UNDER = {"HSI": "Hang Seng Index", "HSTECH": "Hang Seng TECH", "HSCEI": "Hang Seng China Enterprises",
+            "NDQ100": "NASDAQ-100", "NASDAQ": "NASDAQ-100", "NIKKEI": "Nikkei 225", "CSI300": "CSI 300",
+            "CHINEXT": "ChiNext", "GOLD": "Gold Futures", "SMSN": "Samsung Electronics", "HYNIX": "SK Hynix",
+            "KIOXIA": "Kioxia", "BTC": "Bitcoin Futures", "ETH": "Ether Futures", "COIN": "COIN", "TSLA": "TSLA",
+            "NVDA": "NVDA", "MSTR": "MSTR", "BRKB": "BRKB", "KOSPI": "KOSPI 200", "SPX": "S&P 500"}
+
+
+def hk_name(short: str) -> str | None:
+    """'XL2CSOPHSTECH' -> 'CSOP Hang Seng TECH Daily (2x) Leveraged Product'; None if not leveraged."""
+    m = HK_NAME.match(short.strip().upper())
+    if not m or not m.group("n") or float(m.group("n")) < 1.2:
+        return None  # FI / XI without a multiple = -1x inverse, not leveraged
+    rest = m.group("rest").replace(" ", "")
+    issuer = next((v for k, v in HK_ISSUERS.items() if rest.startswith(k)), "")
+    code = rest[len(next((k for k in HK_ISSUERS if rest.startswith(k)), "")):]
+    under = HK_UNDER.get(code, code)
+    sign = "-" if m.group("kind") == "I" else ""
+    kind = "Inverse" if sign else "Leveraged"
+    return f"{issuer} {under} Daily ({sign}{m.group('n')}x) {kind} Product".strip()
+
+
+def _xlsx_rows(content: bytes) -> list[list[str]]:
+    """Minimal .xlsx reader (first sheet, shared + inline strings), so no extra dependency."""
+    z = zipfile.ZipFile(io.BytesIO(content))
+    shared = []
+    if "xl/sharedStrings.xml" in z.namelist():
+        for si in re.findall(r"<(?:x:)?si>(.*?)</(?:x:)?si>", z.read("xl/sharedStrings.xml").decode(), re.S):
+            shared.append(html.unescape("".join(re.findall(r"<(?:x:)?t[^>]*>(.*?)</(?:x:)?t>", si, re.S))))
+    sheet = z.read("xl/worksheets/sheet1.xml").decode()
+    rows = []
+    for row in re.findall(r"<(?:x:)?row\b[^>]*>(.*?)</(?:x:)?row>", sheet, re.S):
+        cells: dict[int, str] = {}
+        for attrs, body in re.findall(r"<(?:x:)?c\b([^>]*?)(?:/>|>(.*?)</(?:x:)?c>)", row, re.S):
+            ref = re.search(r'r="([A-Z]+)\d+"', attrs)
+            if not ref:
+                continue
+            col = 0
+            for ch in ref.group(1):
+                col = col * 26 + ord(ch) - 64
+            text = "".join(re.findall(r"<(?:x:)?t[^>]*>(.*?)</(?:x:)?t>", body or "", re.S))
+            if not text:
+                v = re.search(r"<(?:x:)?v>(.*?)</(?:x:)?v>", body or "")
+                text = v.group(1) if v else ""
+                if 't="s"' in attrs and text.isdigit() and int(text) < len(shared):
+                    text = shared[int(text)]
+            cells[col - 1] = html.unescape(text).strip()
+        if cells:
+            rows.append([cells.get(i, "") for i in range(max(cells) + 1)])
+    return rows
+
+
+async def hkex(client: httpx.AsyncClient) -> list[Listing]:
+    """Hong Kong: HKEX's official List of Securities, 'Leveraged and Inverse' sub-category."""
+    r = await client.get("https://www.hkex.com.hk/eng/services/trading/securities/securitieslists/ListOfSecurities.xlsx",
+                         headers=UA)
+    r.raise_for_status()
+    rows = _xlsx_rows(r.content)
+    hdr = next((i for i, row in enumerate(rows) if "Stock Code" in row), None)
+    if hdr is None:
+        raise RuntimeError("hkex: header row not found")
+    h = rows[hdr]
+    ci, ni, si, ii = (h.index("Stock Code"), h.index("Name of Securities"), h.index("Sub-Category"),
+                      h.index("ISIN") if "ISIN" in h else None)
+    out = []
+    for row in rows[hdr + 1:]:
+        if len(row) <= max(ci, ni, si) or "leveraged" not in row[si].lower():
+            continue
+        name = hk_name(row[ni])
+        if name:
+            code = row[ci].lstrip("0").zfill(4)
+            out.append(Listing(f"{code}.HK", name, "hkex", "ETF", row[ii] if ii is not None and ii < len(row) else None))
+    return out
+
+
+async def jpx(client: httpx.AsyncClient) -> list[Listing]:
+    """Tokyo: JPX's table of leveraged / inverse products listed this year (new launches)."""
+    r = await client.get("https://www.jpx.co.jp/english/equities/products/etfs/leveraged-inverse/index.html",
+                         headers=UA)
+    r.raise_for_status()
+    out = []
+    for tr in re.findall(r"<tr>(.*?)</tr>", r.text, re.S):
+        tds = [re.sub(r"\s+", " ", re.sub(r"<div.*?</div>|<[^>]+>", " ", td, flags=re.S)).strip()
+               for td in re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S)]
+        if len(tds) >= 4 and re.fullmatch(r"[0-9A-Z]{4}", tds[2]):
+            out.append(Listing(f"{tds[2]}.T", f"{tds[3]} ({tds[1]})", "jpx", "ETF"))
+    return out
+
+
+async def krx(client: httpx.AsyncClient) -> list[Listing]:
+    """Korea: every KRX-listed ETF, via Naver Finance's public ETF list (EUC-KR JSON)."""
+    r = await client.get("https://finance.naver.com/api/sise/etfItemList.nhn", headers=UA)
+    r.raise_for_status()
+    data = json.loads(r.content.decode("euc-kr", errors="replace"))
+    out = [Listing(f"{x['itemcode']}.KS", x.get("itemname") or "", "krx", "ETF")
+           for x in (data.get("result") or {}).get("etfItemList") or [] if x.get("itemcode")]
+    if not out:
+        raise RuntimeError("krx: empty ETF list")
     return out
 
 
@@ -196,7 +365,8 @@ async def fmp(client: httpx.AsyncClient) -> list[Listing]:
     return [Listing(str(x["symbol"]).upper(), x.get("name") or "", "fmp", "ETF") for x in r.json() if x.get("symbol")]
 
 
-SOURCES = {"nasdaqtrader": nasdaqtrader, "alpaca": alpaca, "yahoo": yahoo, "eodhd": eodhd, "fmp": fmp}
+SOURCES = {"nasdaqtrader": nasdaqtrader, "alpaca": alpaca, "tsx": tsx, "twse": twse, "tpex": tpex, "krx": krx,
+           "hkex": hkex, "jpx": jpx, "yahoo": yahoo, "eodhd": eodhd, "fmp": fmp}
 
 
 # ---------------------------------------------------------------- merge
