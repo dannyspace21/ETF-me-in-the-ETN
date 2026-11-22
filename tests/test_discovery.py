@@ -79,6 +79,21 @@ def live(monkeypatch):
     ("Volatility Shares 2x Bitcoin Strategy ETF", 2, "long", "ETF", "crypto"),
     ("ProShares Ultra VIX Short-Term Futures ETF", 2, "long", "ETF", "volatility"),
     ("AXS 1.25X NVDA Bear Daily ETF", 1.25, "short", "ETF", "single-stock"),
+    # regressions found in the first live scan
+    ("Corgi NVDA 2x Daily ETF", 2, "long", "ETF", "single-stock"),
+    ("Corgi U.S. Large-Cap 2x Daily ETF", 2, "long", "ETF", "broad"),
+    ("Corgi All World 2x Daily ETF", 2, "long", "ETF", "intl"),
+    ("GraniteShares 2x Long SpaceX Daily ETF", 2, "long", "ETF", "single-stock"),
+    ("Leverage Shares 3x Long Anthropic ETP", 3, "long", "ETP", "single-stock"),
+    ("Leverage Shares 2X Long BULL Daily ETF", 2, "long", "ETF", "single-stock"),
+    ("GraniteShares 2x Long P Daily ETF", 2, "long", "ETF", "single-stock"),
+    ("Defiance Leveraged Long + Income MSTR ETF", 2, "long", "ETF", "single-stock"),
+    ("MicroSectors U.S. Big Banks 3 Leveraged ETNs due February 17, 2045", 3, "long", "ETN", "sector"),
+    ("MicroSectors U.S. Big Oil -3 Inverse Leveraged ETNs due February 17, 2045", 3, "short", "ETN", "commodity"),
+    ("Teucrium xETFs 2x Long Daily BNB ETF", 2, "long", "ETF", "crypto"),
+    ("Tradr 2X Long SPY Quarterly ETF", 2, "long", "ETF", "broad"),
+    ("Roundhill T-REX 2X Long DRAM Daily Target ETF", 2, "long", "ETF", "sector"),
+    ("AdvisorShares MSOS Daily Leveraged ETF", 2, "long", "ETF", "sector"),
 ])
 def test_classify_leveraged(name, lev, direction, typ, group):
     c = classify(name, country="KR" if "KODEX" in name else "US")
@@ -86,7 +101,8 @@ def test_classify_leveraged(name, lev, direction, typ, group):
 
 
 @pytest.mark.parametrize("name", ["Vanguard S&P 500 ETF", "JPMorgan Ultra-Short Income ETF", "Invesco Senior Loan ETF",
-                                  "ProShares Short S&P500", "Direxion Daily S&P 500 Bear 1X Shares", "Invesco QQQ Trust"])
+                                  "ProShares Short S&P500", "Direxion Daily S&P 500 Bear 1X Shares", "Invesco QQQ Trust",
+                                  "U.K. Ultra Long Duration Gilts StlgInstl", "元大台灣50反1"])
 def test_classify_rejects_non_leveraged(name):
     assert classify(name) is None
 
@@ -269,3 +285,78 @@ def test_shipped_snapshot_is_valid_json_if_present():
     if p.exists():
         data = json.loads(p.read_text())
         assert data["count"] == len(data["funds"]) and all("ticker" in f for f in data["funds"])
+
+
+# ---------------------------------------------------------------- official exchange sources (formats as seen live)
+def _xlsx(rows):
+    import io, zipfile
+    def cell(ref, v):
+        return f'<x:c r="{ref}" t="inlineStr"><x:is><x:t>{v}</x:t></x:is></x:c>'
+    body = "".join("<x:row>" + "".join(cell(f"{chr(65 + i)}{r + 1}", v) for i, v in enumerate(row) if v != "")
+                   + "</x:row>" for r, row in enumerate(rows))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", f'<x:worksheet xmlns:x="x"><x:sheetData>{body}</x:sheetData></x:worksheet>')
+    return buf.getvalue()
+
+
+EXCHANGE_FIXTURES = {
+    "tsx.com": {"results": [
+        {"symbol": "TQQQ", "name": "BetaPro 3x Nasdaq-100 Daily Leveraged Bull Alternative ETF"},
+        {"symbol": "HOU", "name": "BetaPro Crude Oil Leveraged Daily Bull ETF"},
+        {"symbol": "BNKU", "name": "MegaLong (3X) Canadian Banks Daily Leveraged Alternative ETF"},
+        {"symbol": "IGBT.UN", "name": "2028 Investment Grade Bond Trust"},
+        {"symbol": "ZGLD", "name": "BMO Gold Bullion ETF"}]},
+    "twse.com.tw": [{"Code": "00631L", "Name": "元大台灣50正2"}, {"Code": "00632R", "Name": "元大台灣50反1"},
+                    {"Code": "00663L", "Name": "國泰臺灣加權正2"}, {"Code": "2330", "Name": "台積電"},
+                    {"Code": "00670L", "Name": "富邦NASDAQ"}],
+    "tpex.org.tw": [{"SecuritiesCompanyCode": "00680L", "CompanyName": "元大美債20正2"},
+                    {"SecuritiesCompanyCode": "006201", "CompanyName": "元大富櫃50"}],
+    "naver.com": {"resultCode": "success", "result": {"etfItemList": [
+        {"itemcode": "122630", "itemname": "KODEX 레버리지"}, {"itemcode": "252670", "itemname": "KODEX 200선물인버스2X"},
+        {"itemcode": "069500", "itemname": "KODEX 200"}, {"itemcode": "418660", "itemname": "TIGER 미국나스닥100레버리지(합성)"}]}},
+}
+
+
+def exchange_handler(req):
+    host = req.url.host
+    if "hkex" in host:
+        return httpx.Response(200, content=_xlsx([
+            ["List of Securities"], [],
+            ["Stock Code", "Name of Securities", "Category", "Sub-Category", "Board Lot", "ISIN"],
+            ["00001", "CKH HOLDINGS", "Equity", "Equity Securities (Main Board)", "500", "KYG217651051"],
+            ["07200", "FL2 CSOP HSI", "Exchange Traded Products", "Leveraged and Inverse", "100", "HK0000330149"],
+            ["07300", "FI CSOP HSI", "Exchange Traded Products", "Leveraged and Inverse", "100", "HK0000330156"],
+            ["07366", "XI2CSOPTSLA", "Exchange Traded Products", "Leveraged and Inverse", "10", "HK0001121224"]]))
+    if "jpx" in host:
+        return httpx.Response(200, text='''<table><tr><th>Listing Date</th></tr>
+          <tr><td>Dec. 02, 2026</td><td>NYSE Semiconductor Daily 2x Leveraged Index</td><td class="a-center">682A</td>
+          <td> Simplex NYSE Semiconductor Bull 2x ETF <div><a href="#">OTC Swap</a></div></td><td>Simplex</td></tr>
+          <tr><td>Jul. 31, 2026</td><td>Solactive JGB Futures Short Index</td><td>612A</td><td> One ETF JGB Futures Short Index </td></tr></table>''')
+    if "naver" in host:
+        return httpx.Response(200, content=json.dumps(EXCHANGE_FIXTURES["naver.com"], ensure_ascii=False).encode("euc-kr"))
+    for k, v in EXCHANGE_FIXTURES.items():
+        if host.endswith(k):
+            return httpx.Response(200, json=v)
+    return httpx.Response(404)
+
+
+def test_official_exchange_sources(live, monkeypatch):
+    monkeypatch.setattr(settings, "discovery_sources", ["tsx", "twse", "tpex", "krx", "hkex", "jpx"])
+
+    async def run():
+        async with mock_client(exchange_handler) as c:
+            return await discovery.discover(c)
+    res = asyncio.run(run())
+    assert res.ok == ["tsx", "twse", "tpex", "krx", "hkex", "jpx"], res.errors
+    f = res.funds
+    assert {"TQQQ.TO", "HOU.TO", "BNKU.TO"} <= set(f) and "ZGLD.TO" not in f and f["BNKU.TO"]["lev"] == 3
+    assert f["TQQQ.TO"]["currency"] == "CAD" and f["HOU.TO"]["lev"] == 2 and f["HOU.TO"]["group"] == "commodity"
+    assert f["00631L.TW"]["lev"] == 2 and "00632R.TW" not in f                     # -1x inverse is not leveraged
+    assert "00670L.TW" in f                                                        # L code = leveraged even without 正2
+    assert f["00680L.TWO"]["group"] == "rates" and f["00680L.TWO"]["currency"] == "TWD"
+    assert f["122630.KS"]["direction"] == "long" and f["252670.KS"]["direction"] == "short"
+    assert f["418660.KS"]["group"] == "broad" and "069500.KS" not in f
+    assert f["7200.HK"]["under"] == "Hang Seng" and "7300.HK" not in f            # FI = -1x
+    assert f["7366.HK"]["direction"] == "short" and f["7366.HK"]["group"] == "single-stock"
+    assert f["682A.T"]["lev"] == 2 and "612A.T" not in f

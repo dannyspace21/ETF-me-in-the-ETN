@@ -54,7 +54,7 @@ EXCHANGES: dict[str, Exchange] = {e.suffix: e for e in [
 
 # Venues that mostly carry *cross-listings* of funds whose home market we already
 # cover (Mexico's SIC lists US ETFs, German regional exchanges list Xetra ETPs …).
-CROSS_LISTING_SUFFIXES = {"MX", "SN", "BA", "DU", "MU", "BE", "SG", "HM", "HA", "VI", "F", "IL"}
+CROSS_LISTING_SUFFIXES = {"MX", "SN", "BA", "DU", "MU", "BE", "SG", "HM", "HA", "VI", "F", "IL", "XA"}
 
 # When the same European ETP is listed on several venues, keep the first of these.
 VENUE_PRIORITY = ["", "L", "DE", "PA", "AS", "MI", "SW", "BR", "MC", "ST", "TO", "NE", "AX", "HK",
