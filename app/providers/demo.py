@@ -55,7 +55,7 @@ def _tqqq_log() -> np.ndarray:
 
 
 @lru_cache(maxsize=256)
-def _series(ticker: str, lev: int, group: str) -> tuple[tuple[str, float], ...]:
+def _series(ticker: str, lev: float, group: str) -> tuple[tuple[str, float], ...]:
     days = _calendar()
     lp = _tqqq_log()
     if ticker == "TQQQ":
@@ -76,5 +76,5 @@ def _series(ticker: str, lev: int, group: str) -> tuple[tuple[str, float], ...]:
 def demo_bars(ticker: str) -> list[Bar]:
     from ..universe import load_universe
     meta = {f.ticker: f for f in load_universe()}.get(ticker)
-    lev, group = (meta.lev, meta.group) if meta else (3, "broad")
+    lev, group = (meta.signed_lev, meta.group) if meta else (3, "broad")
     return [Bar(d, round(p, 4), round(p, 4)) for d, p in _series(ticker, lev, group)]

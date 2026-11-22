@@ -63,13 +63,17 @@ def context_for(svc, ticker: str) -> dict:
 def manifest(request: Request):
     base = str(request.base_url).rstrip("/")
     return {
-        "name": "etf-me-in-the-etn", "description": "Crash tracker for 2x/3x bull leveraged ETFs & ETNs.",
+        "name": "etf-me-in-the-etn", "description": "Crash tracker for every leveraged ETF/ETN/ETP (US + international, bull and bear).",
         "auth": "X-API-Key header (only required when the server sets AGENT_API_KEYS) for POST endpoints",
         "openapi": f"{base}/openapi.json",
         "tools": [
             {"name": "get_board", "method": "GET", "url": f"{base}/api/agent/board",
-             "description": "All tracked funds sorted by drawdown, with alert tier.",
-             "input_schema": {"type": "object", "properties": {"min_drawdown": {"type": "number"}}}},
+             "description": "All tracked funds sorted by drawdown, with alert tier. Filter by drawdown, "
+                            "direction (long/short), country (ISO code, e.g. US, GB, KR), group, minimum leverage.",
+             "input_schema": {"type": "object", "properties": {
+                 "min_drawdown": {"type": "number"}, "direction": {"type": "string", "enum": ["long", "short"]},
+                 "country": {"type": "string"}, "group": {"type": "string"}, "min_lev": {"type": "number"},
+                 "limit": {"type": "integer"}}}},
             {"name": "get_context", "method": "GET", "url": f"{base}/api/agent/context/{{ticker}}",
              "description": "Everything about one fund: summary, crash history, tier scorecard, Monte Carlo.",
              "input_schema": {"type": "object", "properties": {"ticker": {"type": "string"}}, "required": ["ticker"]}},
@@ -84,12 +88,16 @@ def manifest(request: Request):
 
 
 @router.get("/board", summary="Compact board for agents")
-def board(request: Request, min_drawdown: float = 0):
+def board(request: Request, min_drawdown: float = 0, direction: Optional[Literal["long", "short"]] = None,
+          country: Optional[str] = None, group: Optional[str] = None, min_lev: float = 0, limit: int = 500):
     svc = request.app.state.svc
-    rows = [{k: s.get(k) for k in ("ticker", "lev", "type", "under", "price", "ath", "drawdown", "tier",
-                                   "total_return", "since_label", "change_1d", "as_of")}
-            for s in svc.board.values() if s.get("has_data") and -(s["drawdown"] or 0) >= min_drawdown]
-    return sorted(rows, key=lambda r: r["drawdown"])
+    rows = [{k: s.get(k) for k in ("ticker", "lev", "direction", "type", "under", "country", "currency", "price",
+                                   "ath", "drawdown", "tier", "total_return", "since_label", "change_1d", "as_of")}
+            for s in svc.board.values() if s.get("has_data") and -(s["drawdown"] or 0) >= min_drawdown
+            and (not direction or s.get("direction") == direction)
+            and (not country or s.get("country") == country.upper())
+            and (not group or s.get("group") == group) and (s.get("lev") or 0) >= min_lev]
+    return sorted(rows, key=lambda r: r["drawdown"])[:max(1, limit)]
 
 
 @router.get("/context/{ticker}", summary="Full analysis context for one fund")

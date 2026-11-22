@@ -1,7 +1,7 @@
 :root {
   --bg: #0e1013; --panel: #161a20; --panel2: #1c2129; --line: #262c36; --text: #e8ebf0; --muted: #8b94a3;
   --up: #2fd47a; --down: #ff5c5c; --accent: #ffb020;
-  --t-chill: #2fd47a; --t-clench: #f2c94c; --t-shock: #ff8a3d; --t-brown: #a0662f; --t-allin: #c86bff;
+  --t-chill: #2fd47a; --t-clench: #f2c94c; --t-shock: #ff8a3d; --t-brown: #a0662f; --t-allin: #c86bff; --t-new: #4cc9f0;
   --radius: 12px; color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -57,7 +57,17 @@ th.sorted::after { content: " ▾"; } th.sorted.asc::after { content: " ▴"; }
 tbody tr { cursor: pointer; } tbody tr:hover { background: var(--panel2); }
 .tk { font-weight: 800; font-size: 15px; } .lev { font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 4px; margin-left: 6px;
   background: #2b3240; color: var(--accent); } .etn { background: #33244a; color: #d7a8ff; }
+.etp { background: #1f3a3a; color: #7fe0d0; } .bear { background: #4a2424; color: #ff9c9c; }
+.cc { font-size: 10px; font-weight: 700; color: var(--muted); margin-left: 6px; } .newb { font-size: 10px; font-weight: 800; color: var(--t-new); margin-left: 6px; }
+.more { display: flex; gap: 12px; align-items: center; justify-content: center; padding: 12px 0 4px; }
 .under { color: var(--muted); font-size: 12px; }
+.star { cursor: pointer; color: #4a5160; margin-right: 6px; font-size: 15px; user-select: none; } .star.on { color: var(--accent); }
+.star:hover { color: var(--accent); } #star-filter.on { border-color: var(--accent); color: var(--accent); }
+.side { display: grid; gap: 16px; } .feed ul { max-height: 560px; }
+.conn h3 { margin: 0 0 8px; font-size: 15px; } .conn h4 { margin: 12px 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.conn ul { list-style: none; margin: 0; padding: 0; } .conn li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 13px; }
+.conn .ok { color: var(--t-chill); } .conn .warn { color: var(--t-clench); } .conn .off { color: var(--muted); }
+.conn .err { color: var(--t-shock); font-size: 11px; word-break: break-word; }
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-weight: 700; font-size: 12px;
   background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); }
 .dd-bar { display: inline-block; width: 70px; height: 6px; background: #262c36; border-radius: 3px; margin-right: 8px; vertical-align: middle; overflow: hidden; }
