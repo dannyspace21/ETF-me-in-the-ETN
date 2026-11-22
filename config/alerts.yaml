@@ -1,0 +1,12 @@
+# Alert ladder — drawdown measured from the fund's all-time closing high.
+# Lower bound inclusive. Order from mildest to most severe.
+tiers:
+  - {key: chill,   min_dd: 0,   emoji: "😎", label: "Chillin'",        blurb: "Business as usual."}
+  - {key: clench,  min_dd: 20,  emoji: "😬", label: "Clench",          blurb: "Down 20%+. Butt cheeks engaged."}
+  - {key: shock,   min_dd: 40,  emoji: "😱", label: "Real Shock",      blurb: "Down 40%+. Leveraged bull got tased."}
+  - {key: brown,   min_dd: 60,  emoji: "💩", label: "Code Brown",      blurb: "Down 60%+. It took a poop. Start shopping."}
+  - {key: allin,   min_dd: 75,  emoji: "🚀", label: "ETF Me In The ETN", blurb: "Down 75%+. All the money the world has seen."}
+
+# Personal price targets seeded on first boot (editable in the UI / API).
+seed_targets:
+  - {ticker: TQQQ, price: 25, direction: below, label: "Put all the money the world has seen into it"}

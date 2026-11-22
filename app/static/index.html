@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ETF Me in the ETN</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">
+    <img src="/static/icon.svg" alt="" width="44" height="44">
+    <div>
+      <h1>ETF Me in the ETN</h1>
+      <p class="tag">Leveraged bull crash tracker — for when they really poop the bed.</p>
+    </div>
+  </a>
+  <div class="top-right">
+    <span id="demo" class="pill demo" hidden>DEMO DATA</span>
+    <span id="updated" class="muted small"></span>
+    <button id="refresh" class="btn ghost" title="Pull fresh prices">⟳ Refresh</button>
+    <a class="btn ghost" href="/docs" target="_blank" rel="noopener">API</a>
+  </div>
+</header>
+
+<main>
+  <!-- ======================= BOARD ======================= -->
+  <section id="board-view">
+    <div id="ladder" class="ladder"></div>
+
+    <div class="layout">
+      <div class="panel grow">
+        <div class="controls">
+          <input id="search" type="search" placeholder="Search ticker or underlying…">
+          <div class="seg" data-key="lev"><button data-v="">All</button><button data-v="3">3x</button><button data-v="2">2x</button></div>
+          <div class="seg" data-key="type"><button data-v="">All</button><button data-v="ETF">ETF</button><button data-v="ETN">ETN</button></div>
+          <select id="group">
+            <option value="">All groups</option><option>broad</option><option>sector</option><option>intl</option>
+            <option>commodity</option><option>rates</option><option>single-stock</option><option>crypto</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="board">
+            <thead><tr>
+              <th data-sort="ticker">Fund</th>
+              <th data-sort="tier_index">Alert</th>
+              <th data-sort="price" class="num">Price</th>
+              <th data-sort="change_1d" class="num">1D</th>
+              <th data-sort="ath" class="num">Peak</th>
+              <th data-sort="drawdown" class="num">From peak</th>
+              <th data-sort="pct_to_next_tier" class="num">Next level</th>
+              <th data-sort="total_return" class="num">Since ’11 / incep.</th>
+              <th class="spark-col">1 year</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <aside class="panel feed">
+        <h3>💨 Alert feed</h3>
+        <ul id="feed"></ul>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ======================= DETAIL ======================= -->
+  <section id="detail-view" hidden>
+    <a href="#/" class="back">← Back to the board</a>
+    <div id="detail"></div>
+  </section>
+</main>
+
+<footer>
+  <span>Not financial advice. Leveraged ETFs/ETNs can and do go to ~zero. ETNs also carry issuer credit risk.</span>
+  <span id="ver" class="muted"></span>
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

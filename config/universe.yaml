@@ -1,0 +1,89 @@
+# ETF Me in the ETN — tracked universe of 2x / 3x BULL leveraged ETFs & ETNs.
+# Add / remove freely. Tickers that a data provider can't find (delisted, renamed)
+# simply show "no data" in the UI — nothing breaks.
+#
+#   ticker:   exchange symbol
+#   lev:      2 or 3
+#   type:     ETF | ETN
+#   group:    broad | sector | intl | commodity | rates | single-stock | crypto
+#   under:    what it multiplies
+funds:
+  # ---------- 3x broad market ----------
+  - {ticker: TQQQ, lev: 3, type: ETF, group: broad,  issuer: ProShares, under: "Nasdaq-100"}
+  - {ticker: UPRO, lev: 3, type: ETF, group: broad,  issuer: ProShares, under: "S&P 500"}
+  - {ticker: SPXL, lev: 3, type: ETF, group: broad,  issuer: Direxion,  under: "S&P 500"}
+  - {ticker: UDOW, lev: 3, type: ETF, group: broad,  issuer: ProShares, under: "Dow Jones Industrial Avg"}
+  - {ticker: TNA,  lev: 3, type: ETF, group: broad,  issuer: Direxion,  under: "Russell 2000"}
+  - {ticker: URTY, lev: 3, type: ETF, group: broad,  issuer: ProShares, under: "Russell 2000"}
+  - {ticker: MIDU, lev: 3, type: ETF, group: broad,  issuer: Direxion,  under: "S&P MidCap 400"}
+  - {ticker: UMDD, lev: 3, type: ETF, group: broad,  issuer: ProShares, under: "S&P MidCap 400"}
+  - {ticker: HIBL, lev: 3, type: ETF, group: broad,  issuer: Direxion,  under: "S&P 500 High Beta"}
+  # ---------- 3x sectors ----------
+  - {ticker: SOXL, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Semiconductors"}
+  - {ticker: TECL, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Technology Select Sector"}
+  - {ticker: FAS,  lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Financial Select Sector"}
+  - {ticker: LABU, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "S&P Biotech"}
+  - {ticker: CURE, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Health Care Select Sector"}
+  - {ticker: DFEN, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Aerospace & Defense"}
+  - {ticker: DPST, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Regional Banks"}
+  - {ticker: DRN,  lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Real Estate Select Sector"}
+  - {ticker: NAIL, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Homebuilders"}
+  - {ticker: RETL, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Retail"}
+  - {ticker: TPOR, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Transportation"}
+  - {ticker: UTSL, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Utilities Select Sector"}
+  - {ticker: WANT, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Consumer Discretionary"}
+  - {ticker: WEBL, lev: 3, type: ETF, group: sector, issuer: Direxion,  under: "Dow Jones Internet"}
+  # ---------- 3x ETNs ----------
+  - {ticker: FNGU, lev: 3, type: ETN, group: sector, issuer: MicroSectors, under: "NYSE FANG+"}
+  - {ticker: BULZ, lev: 3, type: ETN, group: sector, issuer: MicroSectors, under: "Solactive FANG & Innovation"}
+  - {ticker: BNKU, lev: 3, type: ETN, group: sector, issuer: MicroSectors, under: "US Big Banks"}
+  - {ticker: NRGU, lev: 3, type: ETN, group: sector, issuer: MicroSectors, under: "US Big Oil"}
+  - {ticker: OILU, lev: 3, type: ETN, group: commodity, issuer: MicroSectors, under: "Oil & Gas E&P"}
+  - {ticker: GDXU, lev: 3, type: ETN, group: commodity, issuer: MicroSectors, under: "Gold Miners"}
+  # ---------- 3x international / rates ----------
+  - {ticker: YINN, lev: 3, type: ETF, group: intl,   issuer: Direxion,  under: "FTSE China 50"}
+  - {ticker: EDC,  lev: 3, type: ETF, group: intl,   issuer: Direxion,  under: "MSCI Emerging Markets"}
+  - {ticker: EURL, lev: 3, type: ETF, group: intl,   issuer: Direxion,  under: "FTSE Developed Europe"}
+  - {ticker: KORU, lev: 3, type: ETF, group: intl,   issuer: Direxion,  under: "MSCI South Korea"}
+  - {ticker: MEXX, lev: 3, type: ETF, group: intl,   issuer: Direxion,  under: "MSCI Mexico"}
+  - {ticker: TMF,  lev: 3, type: ETF, group: rates,  issuer: Direxion,  under: "ICE 20+ Yr Treasury"}
+  - {ticker: TYD,  lev: 3, type: ETF, group: rates,  issuer: Direxion,  under: "ICE 7-10 Yr Treasury"}
+  # ---------- 2x broad / sectors ----------
+  - {ticker: QLD,  lev: 2, type: ETF, group: broad,  issuer: ProShares, under: "Nasdaq-100"}
+  - {ticker: SSO,  lev: 2, type: ETF, group: broad,  issuer: ProShares, under: "S&P 500"}
+  - {ticker: SPUU, lev: 2, type: ETF, group: broad,  issuer: Direxion,  under: "S&P 500"}
+  - {ticker: DDM,  lev: 2, type: ETF, group: broad,  issuer: ProShares, under: "Dow Jones Industrial Avg"}
+  - {ticker: UWM,  lev: 2, type: ETF, group: broad,  issuer: ProShares, under: "Russell 2000"}
+  - {ticker: MVV,  lev: 2, type: ETF, group: broad,  issuer: ProShares, under: "S&P MidCap 400"}
+  - {ticker: SAA,  lev: 2, type: ETF, group: broad,  issuer: ProShares, under: "S&P SmallCap 600"}
+  - {ticker: ROM,  lev: 2, type: ETF, group: sector, issuer: ProShares, under: "Dow Jones US Technology"}
+  - {ticker: USD,  lev: 2, type: ETF, group: sector, issuer: ProShares, under: "Dow Jones US Semiconductors"}
+  - {ticker: UYG,  lev: 2, type: ETF, group: sector, issuer: ProShares, under: "Dow Jones US Financials"}
+  - {ticker: URE,  lev: 2, type: ETF, group: sector, issuer: ProShares, under: "Dow Jones US Real Estate"}
+  - {ticker: RXL,  lev: 2, type: ETF, group: sector, issuer: ProShares, under: "Dow Jones US Health Care"}
+  - {ticker: ERX,  lev: 2, type: ETF, group: sector, issuer: Direxion,  under: "Energy Select Sector"}
+  - {ticker: GUSH, lev: 2, type: ETF, group: sector, issuer: Direxion,  under: "S&P Oil & Gas E&P"}
+  - {ticker: FNGO, lev: 2, type: ETN, group: sector, issuer: MicroSectors, under: "NYSE FANG+"}
+  - {ticker: CWEB, lev: 2, type: ETF, group: intl,   issuer: Direxion,  under: "CSI China Internet"}
+  - {ticker: INDL, lev: 2, type: ETF, group: intl,   issuer: Direxion,  under: "MSCI India"}
+  - {ticker: BRZU, lev: 2, type: ETF, group: intl,   issuer: Direxion,  under: "MSCI Brazil 25/50"}
+  # ---------- 2x commodities ----------
+  - {ticker: NUGT, lev: 2, type: ETF, group: commodity, issuer: Direxion,  under: "Gold Miners"}
+  - {ticker: JNUG, lev: 2, type: ETF, group: commodity, issuer: Direxion,  under: "Junior Gold Miners"}
+  - {ticker: UGL,  lev: 2, type: ETF, group: commodity, issuer: ProShares, under: "Gold"}
+  - {ticker: AGQ,  lev: 2, type: ETF, group: commodity, issuer: ProShares, under: "Silver"}
+  - {ticker: UCO,  lev: 2, type: ETF, group: commodity, issuer: ProShares, under: "WTI Crude Oil"}
+  - {ticker: BOIL, lev: 2, type: ETF, group: commodity, issuer: ProShares, under: "Natural Gas"}
+  # ---------- 2x single stock ----------
+  - {ticker: NVDL, lev: 2, type: ETF, group: single-stock, issuer: GraniteShares, under: "NVIDIA"}
+  - {ticker: TSLL, lev: 2, type: ETF, group: single-stock, issuer: Direxion,      under: "Tesla"}
+  - {ticker: AAPU, lev: 2, type: ETF, group: single-stock, issuer: Direxion,      under: "Apple"}
+  - {ticker: AMZU, lev: 2, type: ETF, group: single-stock, issuer: Direxion,      under: "Amazon"}
+  - {ticker: MSFU, lev: 2, type: ETF, group: single-stock, issuer: Direxion,      under: "Microsoft"}
+  - {ticker: GGLL, lev: 2, type: ETF, group: single-stock, issuer: Direxion,      under: "Alphabet"}
+  - {ticker: CONL, lev: 2, type: ETF, group: single-stock, issuer: GraniteShares, under: "Coinbase"}
+  - {ticker: MSTU, lev: 2, type: ETF, group: single-stock, issuer: T-Rex,         under: "MicroStrategy"}
+  # ---------- 2x crypto ----------
+  - {ticker: BITX, lev: 2, type: ETF, group: crypto, issuer: Volatility Shares, under: "Bitcoin futures"}
+  - {ticker: BITU, lev: 2, type: ETF, group: crypto, issuer: ProShares,         under: "Bitcoin"}
+  - {ticker: ETHU, lev: 2, type: ETF, group: crypto, issuer: Volatility Shares, under: "Ether futures"}
