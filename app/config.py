@@ -24,6 +24,7 @@ def _bool(name: str, default: bool = False) -> bool:
 class Settings:
     db_path: str = field(default_factory=lambda: _env("DB_PATH", str(ROOT / "data" / "etfme.db")))
     universe_file: str = field(default_factory=lambda: _env("UNIVERSE_FILE", str(ROOT / "config" / "universe.yaml")))
+    snapshot_file: str = field(default_factory=lambda: _env("SNAPSHOT_FILE", str(ROOT / "config" / "discovered.json")))
     alerts_file: str = field(default_factory=lambda: _env("ALERTS_FILE", str(ROOT / "config" / "alerts.yaml")))
 
     # Market data

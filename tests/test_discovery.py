@@ -244,3 +244,27 @@ def test_discovery_api_endpoints():
         b = c.get("/api/agent/board?direction=long&country=US&limit=5").json()
         assert len(b) <= 5 and all(r["country"] == "US" for r in b)
         assert json.dumps(c.get("/api/config").json()["discovery_sources"])
+
+
+def test_snapshot_seeds_universe_without_new_badges(live, tmp_path, monkeypatch):
+    snap = tmp_path / "snap.json"
+    snap.write_text(json.dumps({"generated": "2026-11-01T00:00:00+00:00", "count": 2, "funds": [
+        {"ticker": "SOXS", "name": "Direxion Daily Semiconductor Bear 3X Shares", "lev": 3, "direction": "short",
+         "type": "ETF", "group": "sector", "issuer": "Direxion", "under": "Semiconductor", "country": "US",
+         "currency": "USD", "exchange": "US", "sources": ["nasdaqtrader"]},
+        {"ticker": "QQQ3.L", "name": "WisdomTree NASDAQ 100 3x Daily Leveraged", "lev": 3, "direction": "long",
+         "type": "ETP", "group": "broad", "issuer": "WisdomTree", "under": "NASDAQ 100", "country": "GB",
+         "currency": "GBP", "exchange": "London", "sources": ["yahoo"]}]}))
+    monkeypatch.setattr(settings, "snapshot_file", str(snap))
+    svc = Service(Store(str(tmp_path / "snap.db")))
+    assert svc.fund("SOXS").direction == "short" and svc.fund("QQQ3.L").currency == "GBP"
+    assert not svc.fund("SOXS").new_listing
+    assert svc.import_snapshot() == 0                                   # idempotent
+
+
+def test_shipped_snapshot_is_valid_json_if_present():
+    from pathlib import Path
+    p = Path(settings.snapshot_file)
+    if p.exists():
+        data = json.loads(p.read_text())
+        assert data["count"] == len(data["funds"]) and all("ticker" in f for f in data["funds"])

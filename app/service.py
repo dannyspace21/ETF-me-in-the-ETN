@@ -25,6 +25,8 @@ class Service:
         self.universe: list[Fund] = []
         self._by_ticker: dict[str, Fund] = {}
         self.board: dict[str, dict] = {}
+        if not settings.demo_mode:
+            self.import_snapshot()
         self.reload_universe()
         self.discovery_running = False
         self.last_discovery: dict | None = None
@@ -36,6 +38,31 @@ class Service:
             for t in cfg.get("seed_targets", []):
                 self.store.add_target(t["ticker"], float(t["price"]), t.get("direction", "below"), t.get("label", ""))
             self.store.kv_set("seeded", "1")
+
+    def import_snapshot(self, path: str | None = None) -> int:
+        """Seed the discovered-funds table from the snapshot shipped with the app
+        (config/discovered.json, refreshed daily by GitHub Actions), so every known
+        leveraged fund is tracked from the first start. Only tickers the database
+        doesn't know yet are added; they never count as new listings."""
+        path = path or settings.snapshot_file
+        try:
+            with open(path, encoding="utf-8") as fh:
+                snap = json.load(fh)
+        except FileNotFoundError:
+            return 0
+        except Exception as e:  # noqa: BLE001
+            log.warning("snapshot %s unreadable: %s", path, e)
+            return 0
+        known = {r["ticker"] for r in self.store.funds()}
+        ts = snap.get("generated")
+        n = 0
+        for f in snap.get("funds", []):
+            if f.get("ticker") and f["ticker"] not in known:
+                self.store.upsert_fund({**f, "first_seen": ts, "last_seen": ts, "status": "active", "new_listing": 0})
+                n += 1
+        if n:
+            log.info("imported %d funds from snapshot %s (generated %s)", n, path, ts)
+        return n
 
     def reload_universe(self) -> list[Fund]:
         """Rebuild the universe from curated YAML + discovered funds. Returns funds that are new to it."""
