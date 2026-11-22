@@ -27,6 +27,7 @@ class Fund:
     full_name: str = ""
     source: str = "curated"       # curated | discovered
     first_seen: str | None = None
+    new_listing: bool = False     # launched after discovery's baseline scan (not just first seen)
 
     @property
     def signed_lev(self) -> float:
@@ -46,7 +47,7 @@ def _from_row(row: dict, source: str) -> Fund:
                 under=str(row.get("under") or ""), direction=str(row.get("direction") or "long").lower(),
                 country=str(row.get("country") or e.country), currency=str(row.get("currency") or e.currency),
                 exchange=str(row.get("exchange") or e.name), full_name=str(row.get("name") or ""),
-                source=source, first_seen=row.get("first_seen"))
+                source=source, first_seen=row.get("first_seen"), new_listing=bool(row.get("new_listing")))
 
 
 def load_curated(path: str | None = None) -> tuple[list[Fund], set[str]]:

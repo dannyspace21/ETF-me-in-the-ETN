@@ -23,7 +23,7 @@ EXCHANGES: dict[str, Exchange] = {e.suffix: e for e in [
     Exchange("L", "London", "GB", "GBP", "LSE", "uk"),
     Exchange("DE", "Xetra", "DE", "EUR", "XETRA", "de"),
     Exchange("F", "Frankfurt", "DE", "EUR", "F", None),
-    Exchange("PA", "Euronext Paris", "FR", "EUR", "PA", "fr"),
+    Exchange("PA", "Euronext Paris", "FR", "EUR", "PA", None),
     Exchange("AS", "Euronext Amsterdam", "NL", "EUR", "AS", None),
     Exchange("BR", "Euronext Brussels", "BE", "EUR", "BR", None),
     Exchange("MI", "Borsa Italiana", "IT", "EUR", "MI", None),

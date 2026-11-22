@@ -126,6 +126,7 @@ def test_service_discovery_new_listing_and_delisting(live, tmp_path, monkeypatch
 
     first = asyncio.run(run())
     assert first["found"] == 8 and first["new_listings"] == []       # first scan = baseline, no alert spam
+    assert not svc.fund("NVDL").new_listing                            # ... and no NEW badge either
     assert svc.fund("NVDL") and svc.fund("QQQ3.L").currency == "GBP"
     assert svc.fund("TQQQ").source == "curated"                        # curated metadata wins
 
@@ -133,7 +134,8 @@ def test_service_discovery_new_listing_and_delisting(live, tmp_path, monkeypatch
     state["other"] = OTHER.replace("File Creation", "TSLT|T-Rex 2X Long Tesla Daily Target ETF|Z|TSLT|Y|100|N|TSLT\nFile Creation")
     second = asyncio.run(run())
     assert second["new_listings"] == ["TSLT"]
-    assert svc.fund("TSLT").group == "single-stock"
+    assert svc.fund("TSLT").group == "single-stock" and svc.fund("TSLT").new_listing
+    assert [r["ticker"] for r in svc.store.funds() if r["new_listing"]] == ["TSLT"]
     alert = svc.store.alerts(5)[0]
     assert alert["kind"] == "new_fund" and alert["ticker"] == "TSLT"
 

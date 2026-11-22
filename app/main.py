@@ -119,12 +119,12 @@ def unwatch(ticker: str, request: Request, _: str = Depends(require_key)):
     return s.store.watchlist()
 
 
-@app.get("/api/funds/new", tags=["discovery"], summary="Funds discovery found in the last N days")
+@app.get("/api/funds/new", tags=["discovery"], summary="New launches found in the last N days")
 def new_funds(request: Request, days: int = 30):
     from datetime import datetime, timedelta, timezone
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     s = svc(request)
-    rows = [r for r in s.store.funds() if (r["first_seen"] or "") >= cutoff]
+    rows = [r for r in s.store.funds() if r.get("new_listing") and (r["first_seen"] or "") >= cutoff]
     return sorted(rows, key=lambda r: r["first_seen"], reverse=True)
 
 

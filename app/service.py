@@ -167,13 +167,17 @@ class Service:
             new_listings, added_rows = [], 0
             for t, f in res.funds.items():
                 old = self.store.get_fund(t)
-                row = {**f, "first_seen": old["first_seen"] if old else now, "last_seen": now, "status": "active"}
+                # A fund is a *new listing* only if a source that had already done its baseline scan
+                # just saw it for the first time. Everything found by a first scan is pre-existing.
+                is_new = not old and bool(set(f["sources"]) & booted)
+                row = {**f, "first_seen": old["first_seen"] if old else now, "last_seen": now, "status": "active",
+                       "new_listing": (old or {}).get("new_listing") or int(is_new)}
                 if old:
                     row["sources"] = set(f["sources"]) | set((old.get("sources") or "").split(",")) - {""}
                 self.store.upsert_fund(row)
                 if not old:
                     added_rows += 1
-                    if set(f["sources"]) & booted:
+                    if is_new:
                         new_listings.append(t)
             # delist: gone from every exhaustive source that found it, for long enough
             ok_exhaustive = set(res.ok) & discovery.EXHAUSTIVE

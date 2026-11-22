@@ -226,7 +226,7 @@ KEYS = {"alpaca": lambda: alpaca_enabled(), "tiingo": lambda: bool(settings.tiin
         "polygon": lambda: bool(settings.polygon_key), "fmp": lambda: bool(settings.fmp_key),
         "eodhd": lambda: bool(settings.eodhd_key), "alphavantage": lambda: bool(settings.alphavantage_key)}
 MARKETS = {"alpaca": "US", "tiingo": "US", "polygon": "US", "alphavantage": "US",
-           "stooq": "US, UK, DE, FR, JP, HK", "yahoo": "US + international", "fmp": "US + international",
+           "stooq": "US, UK, DE, JP, HK", "yahoo": "US + international", "fmp": "US + international",
            "eodhd": "US + international"}
 
 

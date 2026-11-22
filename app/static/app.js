@@ -19,7 +19,7 @@ const money = (v, cur = state.cur) => {
   return sym + (big ? v.toLocaleString(undefined, { maximumFractionDigits: v >= 1000 ? 0 : 2 }) : v.toFixed(2));
 };
 const levTag = (x) => `<span class="lev ${x.direction === "short" ? "bear" : x.type === "ETN" ? "etn" : x.type === "ETP" ? "etp" : ""}">${x.lev}x ${x.direction === "short" ? "Bear " : ""}${x.type}</span>${x.country && x.country !== "US" ? `<span class="cc" title="${esc(x.exchange)}">${x.country}</span>` : ""}`;
-const isNew = (x, days) => x.source === "discovered" && x.first_seen && Date.now() - new Date(x.first_seen) < days * 86400e3;
+const isNew = (x, days) => x.new_listing && x.first_seen && Date.now() - new Date(x.first_seen) < days * 86400e3;
 const pct = (v, d = 1) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(d)}%`);
 const cls = (v) => (v == null ? "" : v >= 0 ? "up" : "down");
 const ago = (iso) => {

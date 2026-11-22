@@ -2,7 +2,7 @@
 
 <h1 align="center">ETF Me in the ETN</h1>
 <p align="center"><b>A crash tracker for every leveraged ETF, ETN and ETP, in the US and abroad.</b><br>
-It finds every leveraged fund that trades (and every new one the day it lists) and tells you when one has really pooped the bed, because that's when they bounce the hardest.</p>
+It finds the leveraged funds that trade, re-checks for new launches twice a day, and tells you when one has really pooped the bed, because that's when they bounce the hardest.</p>
 
 ---
 
@@ -10,8 +10,8 @@ It finds every leveraged fund that trades (and every new one the day it lists) a
 
 Leveraged bulls crash hard, but the ones tracking big, durable indexes have come back harder. This app:
 
-* **finds every leveraged ETF / ETN / ETP automatically**: US (Nasdaq, NYSE, NYSE Arca, Cboe) plus London, Xetra, Paris, Amsterdam, Milan, Swiss, Toronto, Hong Kong, Tokyo, Korea, Taiwan, ASX and more. 1.25x to 5x, bull **and** bear, broad market, sectors, single stocks, crypto, commodities, rates, volatility
-* **re-scans for new launches** every 12 hours and alerts you when a new leveraged fund lists; funds that close are marked delisted
+* **finds leveraged ETFs / ETNs / ETPs automatically**: every US listing (Nasdaq, NYSE, NYSE Arca, Cboe), plus London, Xetra, Paris, Amsterdam, Milan, Swiss, Toronto, Hong Kong, Tokyo, Korea, Taiwan, ASX and more. 1.25x and up, bull **and** bear, broad market, sectors, single stocks, crypto, commodities, rates, volatility. International coverage is best-effort from Yahoo search unless you add an EODHD key (see [discovery](#finding-every-leveraged-fund-discovery))
+* **re-scans for new launches** every 12 hours and alerts you when a new leveraged fund shows up; funds that close are marked delisted
 * pulls **real market data** from Alpaca, Yahoo, Stooq, EODHD, Tiingo, Polygon, FMP or Alpha Vantage, with automatic fallback
 * puts each fund on an **alert ladder** based on its drop from the peak
 * shows **every past 50%+ crash** and what buying it would have returned 1y and 2y later
@@ -22,9 +22,9 @@ Leveraged bulls crash hard, but the ones tracking big, durable indexes have come
 
 ## Screenshots
 
-> Screenshots use the built-in `DEMO_MODE` (synthetic data shaped like TQQQ's real history), so they look the same without internet access.
+> Screenshots use the built-in `DEMO_MODE` (synthetic data shaped like TQQQ's real history), so they look the same without internet access. Demo mode turns discovery off, so they only show the ~80 curated funds from `config/universe.yaml`; a live install tracks thousands.
 
-**The board:** every fund ranked by how far it has fallen, alert-level counts on top, alert feed on the right.
+**The board:** every fund ranked by how far it has fallen, alert-level counts on top, filters for bull/bear, ETF/ETN/ETP, leverage, group, market and new listings, a ☆ to star funds, and the alert feed and data-connections panel on the right.
 
 ![Board](docs/screenshots/board.png)
 
@@ -47,6 +47,8 @@ Drawdown is measured from the highest close in the last `PEAK_LOOKBACK_YEARS` (d
 | 😱 Real Shock | ≥ 40% | Leveraged bull got tased. |
 | 💩 Code Brown | ≥ 60% | It took a poop. Start shopping. |
 | 🚀 ETF Me In The ETN | ≥ 75% | All the money the world has seen. |
+
+The ladder applies to bear (inverse) funds too: for them a big drawdown means the underlying has rallied.
 
 Edit `config/alerts.yaml` to change the levels, names or seeded price targets. Alerts use a 3-point buffer, so a fund sitting right on a line doesn't trigger an alert every day.
 
@@ -76,13 +78,13 @@ uvicorn app.main:app --reload
 * **Image:** every push to `main` and every `v*` tag is tested, then built for `linux/amd64` and `linux/arm64` (Raspberry Pi and Apple Silicon included) and published to `ghcr.io/dannyspace21/etf-me-in-the-etn` as `latest`, `X.Y.Z`, `X.Y` and `sha-…`.
 * **Manual upgrade:** `docker compose pull && docker compose up -d`
 * **Automatic upgrade:** `docker compose --profile autoupdate up -d` starts Watchtower, which checks for a new image every 6 hours.
-* **Pin a version:** `IMAGE=ghcr.io/dannyspace21/etf-me-in-the-etn:1.0.0 docker compose up -d`
-* **Release:** `git tag v1.1.0 && git push --tags`
+* **Pin a version:** `IMAGE=ghcr.io/dannyspace21/etf-me-in-the-etn:2.0.0 docker compose up -d`
+* **Release:** `git tag v2.0.0 && git push --tags`
 * The container runs as a non-root user, has a `/healthz` healthcheck and reads all its config from environment variables, so it also runs as-is on Fly.io, Railway, Render, Kubernetes, Unraid, Synology and similar.
 
 ## Finding every leveraged fund (discovery)
 
-There is no hand-maintained list any more. On startup, and then every `DISCOVERY_HOURS` (default 12), the app pulls the full symbol lists below, keeps every product whose name says it is leveraged (`3X`, `UltraPro`, `Daily (2x) Leveraged`, `-3x Short`, `LevDAX`, `KODEX Leverage`, `Geared` …), works out leverage, bull/bear, issuer, underlying and group, and de-duplicates funds listed on several European venues.
+You no longer have to maintain the fund list by hand. On startup, and then every `DISCOVERY_HOURS` (default 12), the app pulls the symbol lists below, keeps every product whose name says it is leveraged (`3X`, `UltraPro`, `Daily (2x) Leveraged`, `-3x Short`, `LevDAX`, `KODEX Leverage`, `Geared` …), works out leverage, bull/bear, issuer, underlying and group, and de-duplicates funds listed on several European venues. Recognising a leveraged fund from its name is rule-based, so the odd fund can be missed or put in the wrong group; pin or exclude it in `config/universe.yaml` (see below).
 
 | Source | Key? | What it covers |
 |---|---|---|
@@ -94,10 +96,10 @@ There is no hand-maintained list any more. On startup, and then every `DISCOVERY
 
 Sources without a key are skipped, so the defaults work out of the box: all US funds plus what Yahoo finds abroad. Add an EODHD key to get every international listing.
 
-* **New listings:** after the first scan (the baseline), any new fund fires a `🆕 New leveraged fund` alert and push notification, and the UI marks it **NEW**. Its full price history is pulled right away.
+* **New listings:** each source's first scan is a baseline: those funds already existed, so they get no alert and no badge. After that, any fund a source hasn't seen before fires a `🆕 New leveraged fund` alert and push notification, gets a **NEW** badge for 30 days, and has its full price history pulled right away. Because scans run every `DISCOVERY_HOURS`, a launch is picked up within about that long of appearing in a source's listings. Funds that only Yahoo search finds can also be older funds the search hadn't surfaced before.
 * **Closures:** a fund that has been missing from every complete source that used to list it for `DISCOVERY_DELIST_DAYS` (default 7) is marked delisted and leaves the board. A missed Yahoo search never delists anything.
 * **Scope knobs:** `DISCOVERY_INCLUDE_INVERSE=false` for bulls only, `DISCOVERY_MIN_LEVERAGE=2` to drop 1.25x/1.5x funds, `DISCOVERY_COUNTRIES=US,GB,KR` to limit markets.
-* `config/universe.yaml` still works for pinning funds with your own metadata, and its `exclude:` list hides tickers for good.
+* `config/universe.yaml` holds the ~80 curated funds (always tracked, and the whole universe in demo mode). Entries there override what discovery guesses, and its `exclude:` list hides tickers for good.
 * `POST /api/discovery/run` scans now; `GET /api/discovery` shows the last run, per-source errors and a breakdown by market, leverage and group; `GET /api/funds/new?days=30` lists recent launches.
 
 ## Data sources (financial APIs)
@@ -108,7 +110,7 @@ Set `DATA_PROVIDERS` to a comma-separated list. They are tried in order until on
 |---|---|---|---|
 | `alpaca` (default, used when keys are set) | free account | US | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` |
 | `yahoo` (default) | no | US + international | n/a |
-| `stooq` (default) | no | US, UK, DE, FR, JP, HK | n/a |
+| `stooq` (default) | no | US, UK, DE, JP, HK | n/a |
 | `eodhd` (default, used when key is set) | key | US + international | `EODHD_API_KEY` |
 | `tiingo` | free key | US | `TIINGO_API_KEY` |
 | `polygon` | key | US | `POLYGON_API_KEY` |
@@ -137,7 +139,18 @@ Every outbound request goes through one HTTP layer that caps concurrent requests
 
 Leveraged funds reverse-split constantly. Every refresh compares the overlap between stored and freshly fetched prices, and if they disagree by more than 2% the fund's whole history is refetched, so a 1:10 reverse split never shows up as a fake +900% day.
 
-Each provider is about 20 lines in `app/providers/__init__.py`, so adding another is easy.
+Most providers are about 20 lines in `app/providers/__init__.py`, so adding another is easy.
+
+## Notifications
+
+Set `NOTIFY_URLS` to Discord / Slack webhooks, ntfy topics or any URL that accepts a JSON POST (comma separated). You get a push when a fund moves to another alert level, hits one of your price targets, or newly lists.
+
+With thousands of funds that is a lot of pushes, so:
+
+* `NOTIFY_MIN_TIER=brown` only pushes level changes at 💩 Code Brown or worse (`chill`, `clench`, `shock`, `brown`, `allin`). Everything still shows in the in-app feed.
+* ⭐ **Starred funds always push**, whatever `NOTIFY_MIN_TIER` says. Star them from the board or a fund's page.
+* `NOTIFY_NEW_FUNDS=false` turns off new-listing pushes.
+* A fund's first data load backfills its recent level changes into the feed without pushing them.
 
 ## AI agents
 
@@ -149,8 +162,6 @@ The app is built so AI agents can read its data and write forecasts back. Machin
 | `GET /api/agent/board?min_drawdown=40` | Compact list of all funds, worst first |
 | `GET /api/agent/context/{ticker}` | Everything about one fund: summary, ladder prices, crash episodes, scorecard, Monte Carlo, your targets |
 | `POST /api/agent/forecasts` | Post a forecast (stance, target, probability, rationale); it shows up in the UI |
-| `GET /api/status` | Which data providers and discovery sources are connected, and refresh health |
-| `PUT/DELETE /api/watchlist/{ticker}` | Star / unstar a fund; starred funds' alerts always push |
 | `POST /api/agent/ask` | Ask the server's own LLM about a fund |
 
 ```bash
@@ -158,6 +169,8 @@ curl -X POST localhost:8000/api/agent/forecasts -H 'Content-Type: application/js
   -H "X-API-Key: $KEY" -d '{"agent":"my-bot","ticker":"TQQQ","stance":"accumulate",
   "horizon_days":252,"target_price":60,"probability":55,"rationale":"Down 50%+, history says…"}'
 ```
+
+Other useful endpoints: `GET /api/status` (which data sources are connected, refresh health), `GET /api/discovery` and `GET /api/funds/new` (see above), `PUT`/`DELETE /api/watchlist/{ticker}` (star / unstar).
 
 `/api/agent/board` takes `direction`, `country`, `group`, `min_lev`, `min_drawdown` and `limit`, so an agent can ask e.g. for "every 3x bull in Korea down 60%+".
 
@@ -178,7 +191,8 @@ docker compose exec ollama ollama pull llama3.1:8b
 
 ## How the numbers work
 
-* **Peak / drawdown:** split-adjusted closes. **Returns** (since 2011, 1y/2y after a crash) use dividend-adjusted closes.
+* **Peak / drawdown:** split-adjusted closes. **Returns** (since 2011, 1y/2y after a crash) use dividend-adjusted closes. (EODHD only offers a fully adjusted series, so funds priced from EODHD use it for both.)
+* **Prices** are daily closes; during market hours the latest bar is today's price so far, as of the last refresh. International funds are in their local currency, so don't compare a ₩ price with a $ one.
 * **Crash episodes:** a new episode starts when the fund falls X% below its running peak and ends when it closes at a new high. *"Buy at −50%"* is the first close below the line, which you could actually have bought. *"From bottom"* assumes you caught the exact low, which nobody does.
 * **Monte Carlo:** a stationary block bootstrap (10-day blocks, 3,000 paths) of the fund's *own* daily log returns. Because it resamples the leveraged fund itself rather than "index × 3", decay, fees and fat tails come along automatically. It's a sanity check, not a crystal ball.
 
@@ -191,10 +205,12 @@ app/
   discovery.py     finds every leveraged fund (Nasdaq Trader, Alpaca, Yahoo, EODHD, FMP)
   classify.py      fund name -> leverage, bull/bear, issuer, underlying, group
   exchanges.py     ticker suffix <-> exchange, country, currency, provider symbol formats
+  net.py           shared HTTP client: per-host rate limit + retries
   llm.py           Ollama / OpenAI-compatible / Anthropic client
-  service.py       refresh loop, alert engine, notifications
+  service.py       refresh + discovery loops, alert engine, notifications
   analytics.py     drawdowns, tiers, crash episodes, scorecard, Monte Carlo
   providers/       Alpaca (batched), Yahoo, Stooq, EODHD, Tiingo, Polygon, FMP, Alpha Vantage, demo
+  store.py         SQLite: prices, discovered funds, alerts, targets, watchlist, forecasts
   static/          single-page UI (vanilla JS + SVG, no CDN), icon.svg
 config/            universe.yaml (pinned funds + exclude list), alerts.yaml (ladder + seeded targets)
 tests/             pytest

@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS prices (ticker TEXT, date TEXT, close REAL, adj REAL,
 CREATE TABLE IF NOT EXISTS funds (
   ticker TEXT PRIMARY KEY, name TEXT, lev REAL, direction TEXT, type TEXT, grp TEXT, issuer TEXT, under TEXT,
   country TEXT, currency TEXT, exchange TEXT, isin TEXT, sources TEXT, first_seen TEXT, last_seen TEXT,
-  status TEXT DEFAULT 'active');
+  status TEXT DEFAULT 'active', new_listing INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS meta (ticker TEXT PRIMARY KEY, provider TEXT, last_refresh TEXT, last_error TEXT, tier TEXT);
 CREATE TABLE IF NOT EXISTS targets (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, price REAL, direction TEXT, label TEXT,
@@ -78,7 +78,7 @@ class Store:
 
     # ---------------------------------------------------------------- discovered funds
     FUND_COLS = ("ticker", "name", "lev", "direction", "type", "grp", "issuer", "under", "country", "currency",
-                 "exchange", "isin", "sources", "first_seen", "last_seen", "status")
+                 "exchange", "isin", "sources", "first_seen", "last_seen", "status", "new_listing")
 
     def upsert_fund(self, f: dict) -> None:
         row = {**f, "grp": f.get("group", f.get("grp"))}
