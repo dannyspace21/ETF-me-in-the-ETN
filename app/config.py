@@ -31,7 +31,9 @@ class Settings:
     providers: list[str] = field(default_factory=lambda: [
         p.strip().lower() for p in _env("DATA_PROVIDERS", "alpaca,yahoo,stooq,eodhd").split(",") if p.strip()])
     refresh_minutes: int = field(default_factory=lambda: int(_env("REFRESH_MINUTES", "30")))
-    fetch_concurrency: int = field(default_factory=lambda: int(_env("FETCH_CONCURRENCY", "6")))
+    fetch_concurrency: int = field(default_factory=lambda: int(_env("FETCH_CONCURRENCY", "8")))
+    per_host_concurrency: int = field(default_factory=lambda: int(_env("PER_HOST_CONCURRENCY", "4")))
+    http_retries: int = field(default_factory=lambda: int(_env("HTTP_RETRIES", "3")))
     # Peak used for drawdown = highest close within the last N years (0 = true all-time high).
     # Decaying funds (commodity/single-stock) have absurd split-adjusted ATHs from a decade ago.
     peak_lookback_years: float = field(default_factory=lambda: float(_env("PEAK_LOOKBACK_YEARS", "5")))

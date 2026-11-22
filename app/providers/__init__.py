@@ -222,6 +222,25 @@ REGISTRY: dict[str, Callable] = {"alpaca": alpaca, "yahoo": yahoo, "stooq": stoo
 US_ONLY = {"alpaca", "tiingo", "polygon", "alphavantage"}
 
 
+KEYS = {"alpaca": lambda: alpaca_enabled(), "tiingo": lambda: bool(settings.tiingo_key),
+        "polygon": lambda: bool(settings.polygon_key), "fmp": lambda: bool(settings.fmp_key),
+        "eodhd": lambda: bool(settings.eodhd_key), "alphavantage": lambda: bool(settings.alphavantage_key)}
+MARKETS = {"alpaca": "US", "tiingo": "US", "polygon": "US", "alphavantage": "US",
+           "stooq": "US, UK, DE, FR, JP, HK", "yahoo": "US + international", "fmp": "US + international",
+           "eodhd": "US + international"}
+
+
+def status() -> list[dict]:
+    """Every provider: is it in DATA_PROVIDERS, does it need a key, is the key set."""
+    out = []
+    for name in REGISTRY:
+        needs = name in KEYS
+        out.append({"name": name, "markets": MARKETS.get(name, ""), "needs_key": needs,
+                    "configured": KEYS[name]() if needs else True, "enabled": name in settings.providers,
+                    "order": settings.providers.index(name) if name in settings.providers else None})
+    return sorted(out, key=lambda p: (p["order"] is None, p["order"] or 0, p["name"]))
+
+
 def supports(provider: str, ticker: str) -> bool:
     if provider in US_ONLY:
         return ex.is_us(ticker)

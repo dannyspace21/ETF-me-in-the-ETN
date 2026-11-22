@@ -16,7 +16,8 @@ Leveraged bulls crash hard, but the ones tracking big, durable indexes have come
 * puts each fund on an **alert ladder** based on its drop from the peak
 * shows **every past 50%+ crash** and what buying it would have returned 1y and 2y later
 * runs a **Monte Carlo forecast** on the fund's own returns, so volatility decay is baked in
-* lets you set **price targets** ("TQQQ @ $25: back up the truck") and **pings you** on Discord, Slack, ntfy or any webhook
+* lets you set **price targets** ("TQQQ @ $25: back up the truck"), **star funds** for your watchlist, and **pings you** on Discord, Slack, ntfy or any webhook
+* shows a **📡 Data connections** panel: which APIs are connected, how many funds each one serves, the last discovery scan and what's newly listed
 * exposes an **agent API** so AI agents (local or hosted) can read the data and post their own forecasts
 
 ## Screenshots
@@ -128,6 +129,10 @@ Non-US tickers use Yahoo-style suffixes (`QQQ3.L`, `LQQ.PA`, `HQU.TO`, `7226.HK`
 
 Notes: Alpaca's daily history starts in 2016, so a fund's first full backfill still comes from Yahoo/Stooq/EODHD, and Alpaca keeps it current after that. The free plan can't query the most recent 15 minutes of consolidated (SIP) data; the app asks for SIP up to 16 minutes ago and falls back to the IEX feed if your plan doesn't include SIP (`ALPACA_DATA_FEED=sip|iex`). `ALPACA_PAPER=false` points asset lookups at the live trading API.
 
+### Rate limits & retries
+
+Every outbound request goes through one HTTP layer that caps concurrent requests per host (`PER_HOST_CONCURRENCY`, default 4) and retries timeouts, connection drops, `429` and `5xx` with exponential backoff, honouring `Retry-After` (`HTTP_RETRIES`, default 3). Client errors such as `403` are not retried, so for example an Alpaca plan without SIP access falls straight back to IEX.
+
 ### Reverse splits
 
 Leveraged funds reverse-split constantly. Every refresh compares the overlap between stored and freshly fetched prices, and if they disagree by more than 2% the fund's whole history is refetched, so a 1:10 reverse split never shows up as a fake +900% day.
@@ -144,6 +149,8 @@ The app is built so AI agents can read its data and write forecasts back. Machin
 | `GET /api/agent/board?min_drawdown=40` | Compact list of all funds, worst first |
 | `GET /api/agent/context/{ticker}` | Everything about one fund: summary, ladder prices, crash episodes, scorecard, Monte Carlo, your targets |
 | `POST /api/agent/forecasts` | Post a forecast (stance, target, probability, rationale); it shows up in the UI |
+| `GET /api/status` | Which data providers and discovery sources are connected, and refresh health |
+| `PUT/DELETE /api/watchlist/{ticker}` | Star / unstar a fund; starred funds' alerts always push |
 | `POST /api/agent/ask` | Ask the server's own LLM about a fund |
 
 ```bash
@@ -154,7 +161,7 @@ curl -X POST localhost:8000/api/agent/forecasts -H 'Content-Type: application/js
 
 `/api/agent/board` takes `direction`, `country`, `group`, `min_lev`, `min_drawdown` and `limit`, so an agent can ask e.g. for "every 3x bull in Korea down 60%+".
 
-Set `AGENT_API_KEYS=key1,key2` to require a key on POST endpoints. Leaving it empty keeps them open, which is fine on a home network but not on the public internet.
+Set `AGENT_API_KEYS=key1,key2` to require a key on POST/PUT/DELETE endpoints. Leaving it empty keeps them open, which is fine on a home network but not on the public internet.
 
 ### Running the model offline (the default)
 

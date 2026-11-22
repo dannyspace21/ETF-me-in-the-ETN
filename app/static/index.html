@@ -32,7 +32,8 @@
     <div class="layout">
       <div class="panel grow">
         <div class="controls">
-          <input id="search" type="search" placeholder="Search ticker or underlying…">
+          <input id="search" type="search" placeholder="Search ticker, name, issuer…">
+          <button id="star-filter" class="btn ghost" title="Show only your starred funds">☆ Watchlist</button>
           <div class="seg" data-key="direction"><button data-v="">Bull + Bear</button><button data-v="long">🐂 Bull</button><button data-v="short">🐻 Bear</button></div>
           <div class="seg" data-key="type"><button data-v="">All</button><button data-v="ETF">ETF</button><button data-v="ETN">ETN</button><button data-v="ETP">ETP</button></div>
           <select id="lev" data-key="lev"><option value="">Any leverage</option></select>
@@ -58,9 +59,12 @@
         </div>
         <div class="more"><span id="shown" class="muted small"></span> <button id="more" class="btn ghost" hidden>Show more</button></div>
       </div>
-      <aside class="panel feed">
-        <h3>💨 Alert feed</h3>
-        <ul id="feed"></ul>
+      <aside class="side">
+        <div class="panel feed">
+          <h3>💨 Alert feed</h3>
+          <ul id="feed"></ul>
+        </div>
+        <div class="panel conn" id="conn"></div>
       </aside>
     </div>
   </section>

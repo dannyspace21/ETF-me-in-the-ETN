@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import httpx
 
-from . import analytics, discovery
+from . import analytics, discovery, net
 from .config import settings
 from .providers import alpaca_batch, batch_provider_first, fetch_history
 from .store import Store, now_iso
@@ -129,7 +129,7 @@ class Service:
 
     async def refresh_funds(self, funds: list[Fund]) -> None:
         sem = asyncio.Semaphore(max(1, settings.fetch_concurrency))
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        async with net.client(30) as client:
             pre = await self.prefetch_batched(client, funds)
 
             async def one(f):
@@ -156,7 +156,7 @@ class Service:
         self.discovery_running = True
         try:
             own = client is None
-            client = client or httpx.AsyncClient(timeout=60, follow_redirects=True)
+            client = client or net.client(60)
             try:
                 res = await discovery.discover(client)
             finally:
@@ -288,6 +288,8 @@ class Service:
     def should_push(self, a: dict) -> bool:
         if a["kind"] == "new_fund":
             return settings.notify_new_funds
+        if a["ticker"] in self.store.watchlist():  # starred funds always get through
+            return True
         if a["kind"] == "tier" and settings.notify_min_tier:
             return analytics.tier_index(a["severity"], self.tiers) >= analytics.tier_index(settings.notify_min_tier,
                                                                                           self.tiers)
@@ -301,7 +303,7 @@ class Service:
 
 async def notify(title: str, message: str) -> None:
     """Fan out to Discord / Slack / ntfy / generic JSON webhooks."""
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with net.client(10) as client:
         for url in settings.notify_urls:
             try:
                 if "discord.com" in url:

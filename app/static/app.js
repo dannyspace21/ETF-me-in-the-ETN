@@ -3,7 +3,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const PAGE = 200;
-const state = { cfg: null, funds: [], filter: { lev: "", type: "", group: "", country: "", direction: "", age: "", tier: "", q: "" }, sort: { key: "drawdown", asc: true }, range: "5Y", log: true, cur: "USD", limit: PAGE };
+const state = { cfg: null, funds: [], filter: { lev: "", type: "", group: "", country: "", direction: "", age: "", tier: "", q: "" }, sort: { key: "drawdown", asc: true }, range: "5Y", log: true, cur: "USD", limit: PAGE, watch: new Set(), starOnly: false };
 
 const api = async (path, opts = {}) => {
   const r = await fetch(path, { headers: { "Content-Type": "application/json", ...(opts.headers || {}) }, ...opts });
@@ -38,6 +38,7 @@ async function boot() {
   $("#search").oninput = (e) => { state.filter.q = e.target.value.trim().toUpperCase(); state.limit = PAGE; renderBoard(); };
   $$(".controls select").forEach((sel) => (sel.onchange = (e) => { state.filter[sel.dataset.key] = e.target.value; state.limit = PAGE; renderBoard(); }));
   $("#more").onclick = () => { state.limit += PAGE * 2; renderBoard(); };
+  $("#star-filter").onclick = (e) => { state.starOnly = !state.starOnly; e.currentTarget.classList.toggle("on", state.starOnly); e.currentTarget.textContent = `${state.starOnly ? "★" : "☆"} Watchlist`; state.limit = PAGE; renderBoard(); };
   $$(".seg").forEach((seg) => {
     const key = seg.dataset.key;
     seg.querySelector("button").classList.add("on");
@@ -59,8 +60,10 @@ async function boot() {
 }
 
 async function loadBoard() {
-  const [b, alerts] = await Promise.all([api("/api/funds"), api("/api/alerts?limit=60")]);
+  const [b, alerts, st] = await Promise.all([api("/api/funds"), api("/api/alerts?limit=60"), api("/api/status").catch(() => null)]);
   state.funds = b.funds;
+  state.watch = new Set(b.watchlist || []);
+  if (st) renderConn(st);
   fillFilters();
   const markets = new Set(state.funds.map((x) => x.country)).size;
   $("#count").textContent = `Tracking ${state.funds.length.toLocaleString()} funds in ${markets} market${markets === 1 ? "" : "s"}.`;
@@ -104,7 +107,7 @@ function renderBoard() {
   const f = state.filter;
   let rows = state.funds.filter((x) =>
     (!f.lev || String(x.lev) === f.lev) && (!f.type || x.type === f.type) && (!f.group || x.group === f.group) &&
-    (!f.country || x.country === f.country) && (!f.direction || x.direction === f.direction) && (!f.age || isNew(x, +f.age)) &&
+    (!state.starOnly || state.watch.has(x.ticker)) && (!f.country || x.country === f.country) && (!f.direction || x.direction === f.direction) && (!f.age || isNew(x, +f.age)) &&
     (!f.tier || x.tier === f.tier) && (!f.q || x.ticker.includes(f.q) || (x.under || "").toUpperCase().includes(f.q) ||
       (x.full_name || "").toUpperCase().includes(f.q) || (x.issuer || "").toUpperCase().includes(f.q)));
   const { key, asc } = state.sort;
@@ -120,7 +123,7 @@ function renderBoard() {
   $("#more").hidden = total <= rows.length;
   $("#board tbody").innerHTML = rows.map((x) => {
     const m = (v) => money(v, x.currency);
-    const head = `<td><span class="tk">${x.ticker}</span>${levTag(x)}${isNew(x, 30) ? `<span class="newb">NEW</span>` : ""}<div class="under" title="${esc(x.full_name)}">${esc(x.under)}</div></td>`;
+    const head = `<td>${starTag(x.ticker)}<span class="tk">${x.ticker}</span>${levTag(x)}${isNew(x, 30) ? `<span class="newb">NEW</span>` : ""}<div class="under" title="${esc(x.full_name)}">${esc(x.under)}</div></td>`;
     if (!x.has_data) return `<tr class="nodata" data-t="${x.ticker}">${head}<td colspan="8">no data yet ${x.error ? `— <span title="${esc(x.error)}">provider error</span>` : ""}</td></tr>`;
     const t = tierOf(x.tier), nt = x.next_tier && tierOf(x.next_tier);
     return `<tr data-t="${x.ticker}" style="--c:${tc(x.tier)}">${head}
@@ -134,6 +137,47 @@ function renderBoard() {
       <td>${sparkline(x.spark, tc(x.tier))}</td></tr>`;
   }).join("") || `<tr><td colspan="9" class="empty">Nothing matches. Your filters are too picky.</td></tr>`;
   $$("#board tbody tr[data-t]").forEach((tr) => (tr.onclick = () => (location.hash = `#/${tr.dataset.t}`)));
+  bindStars($("#board"));
+}
+
+/* ------------------------------------------------------------------ watchlist */
+const starTag = (t) => `<span class="star ${state.watch.has(t) ? "on" : ""}" data-star="${t}" title="${state.watch.has(t) ? "Unstar" : "Star: always push this fund's alerts"}">${state.watch.has(t) ? "★" : "☆"}</span>`;
+function bindStars(root) {
+  $$("[data-star]", root).forEach((el) => (el.onclick = async (e) => {
+    e.stopPropagation();
+    const t = el.dataset.star, on = !state.watch.has(t);
+    try { state.watch = new Set(await api(`/api/watchlist/${t}`, { method: on ? "PUT" : "DELETE" })); } catch (er) { return alert(er.message); }
+    $$(`[data-star="${t}"]`).forEach((s) => { s.classList.toggle("on", on); s.textContent = on ? "★" : "☆"; });
+    if (state.starOnly) renderBoard();
+  }));
+}
+
+/* ------------------------------------------------------------------ connections */
+function renderConn(st) {
+  const d = st.discovery || {}, last = d.last_run, r = st.refresh;
+  const prov = st.providers.filter((p) => p.enabled).map((p) => {
+    const s = st.demo_mode ? `<span class="off">demo</span>` : !p.configured ? `<span class="warn" title="Set its API key in .env">no key</span>`
+      : `<span class="ok">✓ ${p.funds ? p.funds.toLocaleString() + " funds" : "ready"}</span>`;
+    return `<li><span>${esc(p.name)} <span class="muted small">${esc(p.markets)}</span></span>${s}</li>`;
+  }).join("");
+  const src = st.discovery_sources.filter((s) => s.enabled).map((s) => {
+    const err = last?.errors?.[s.name];
+    const n = last?.raw_counts?.[s.name];
+    const v = st.demo_mode ? `<span class="off">off in demo</span>` : !s.configured ? `<span class="warn">no key</span>`
+      : err && !err.startsWith("skipped") ? `<span class="warn" title="${esc(err)}">⚠ error</span>`
+      : n != null ? `<span class="ok">✓ ${n.toLocaleString()} listings</span>` : `<span class="off">pending</span>`;
+    return `<li><span>${esc(s.name)}${s.complete ? "" : ` <span class="muted small">search</span>`}</span>${v}</li>`;
+  }).join("");
+  const news = (last?.new_listings || []).slice(0, 8).map((t) => `<a href="#/${t}">${esc(t)}</a>`).join(", ");
+  $("#conn").innerHTML = `<h3>📡 Data connections</h3>
+    <div class="muted small">${r.with_data.toLocaleString()} of ${r.funds.toLocaleString()} funds have prices${r.errors ? ` · ${r.errors} with errors` : ""} · refresh every ${r.every_minutes} min</div>
+    <h4>Prices (tried in order)</h4><ul>${prov}</ul>
+    <h4>Fund discovery ${d.enabled ? `· every ${d.every_hours}h` : ""}</h4><ul>${src}</ul>
+    <div class="muted small" style="margin-top:8px">${last ? `Last scan ${ago(last.ts)}: ${last.found.toLocaleString()} leveraged funds found${last.added ? `, ${last.added} added` : ""}${last.delisted?.length ? `, ${last.delisted.length} delisted` : ""}.` : d.enabled ? (d.running ? "Scanning…" : "First scan pending…") : "Discovery is off (demo mode)."}
+    ${news ? `<br>🆕 New: ${news}` : ""}</div>
+    ${d.enabled ? `<button class="btn ghost" id="scan" style="margin-top:10px;width:100%" ${d.running ? "disabled" : ""}>${d.running ? "Scanning…" : "🔎 Scan for new funds now"}</button>` : ""}`;
+  const b = $("#scan");
+  if (b) b.onclick = async () => { b.disabled = true; b.textContent = "Scanning…"; await api("/api/discovery/run", { method: "POST" }).catch((e) => alert(e.message)); setTimeout(loadBoard, 15000); };
 }
 
 function renderFeed(alerts) {
@@ -196,7 +240,7 @@ let current = null;
 async function loadDetail(t) {
   $("#detail").innerHTML = `<div class="empty">Loading ${esc(t)}…</div>`;
   try { current = await api(`/api/funds/${t}`); } catch (e) { $("#detail").innerHTML = `<div class="empty">Couldn't load ${esc(t)}: ${esc(e.message)}</div>`; return; }
-  renderDetail(); window.scrollTo(0, 0);
+  renderDetail(); bindStars($("#detail")); window.scrollTo(0, 0);
 }
 
 function renderDetail() {
@@ -207,7 +251,7 @@ function renderDetail() {
   const ladder = state.cfg.tiers.filter((x) => x.min_dd > 0).map((x) => ({ ...x, price: s.ath * (1 - x.min_dd / 100) }));
   $("#detail").innerHTML = `
     <div class="hero" style="--c:${tc(s.tier)}">
-      <div><h2>${s.ticker} ${levTag(s)}</h2>
+      <div><h2>${starTag(s.ticker)}${s.ticker} ${levTag(s)}</h2>
         <div class="muted">${esc(s.full_name || s.under)} · ${esc(s.issuer)} · ${esc(s.exchange)} (${s.currency}) · data since ${s.first_date}${s.provider ? ` · via ${esc(s.provider)}` : ""}</div></div>
       <div class="num"><div class="price">${money(s.price)}</div><div class="${cls(s.change_1d)}">${pct(s.change_1d, 2)} today · as of ${s.as_of}</div></div>
     </div>

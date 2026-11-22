@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS forecasts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, agent TEXT, ticker TEXT, horizon_days INTEGER,
   target_price REAL, probability REAL, stance TEXT, rationale TEXT);
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS watchlist (ticker TEXT PRIMARY KEY, added_at TEXT);
 """
 
 
@@ -98,6 +99,19 @@ class Store:
         if r:
             r[0]["group"] = r[0].pop("grp")
         return r[0] if r else None
+
+    # ---------------------------------------------------------------- watchlist
+    def watchlist(self) -> list[str]:
+        return [r["ticker"] for r in self.q("SELECT ticker FROM watchlist ORDER BY added_at")]
+
+    def watch(self, ticker: str, on: bool = True) -> None:
+        if on:
+            self.x("INSERT OR IGNORE INTO watchlist VALUES (?,?)", (ticker.upper(), now_iso()))
+        else:
+            self.x("DELETE FROM watchlist WHERE ticker=?", (ticker.upper(),))
+
+    def provider_stats(self) -> list[dict]:
+        return self.q("SELECT provider, COUNT(*) n, SUM(last_error IS NOT NULL) errors FROM meta GROUP BY provider")
 
     # ---------------------------------------------------------------- meta
     def set_meta(self, ticker: str, **kw) -> None:
